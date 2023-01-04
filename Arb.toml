@@ -1,0 +1,88 @@
+APIKEY = "057fa467-501a-47b8-9b23-36041d1a8388"
+USERNAME = "Bot"
+
+[GROUPS."Isaac Trustworthiness Jan"]
+"https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO"]
+"https://manifold.markets/Courtney/isaacking-and-destiny-together-mani-42332c90e971" = ["YES", "NO"]
+
+# [GROUPS."Monkeypox >= 83500"]
+# "https://manifold.markets/Lifejacker/will-there-be-83500-confirmed-cases" = [ "YES", "NO"]
+# "https://manifold.markets/Lifejacker/will-there-be-83500-confirmed-cases-e402502ec82e" = [ "YES", "NO"]
+
+# [GROUPS.69]
+# "https://manifold.markets/IsaacKing/will-this-markets-probability-be-at" = [ "YES", "NO"]
+# "https://manifold.markets/BionicD0LPH1N/will-isaac-kings-69-market-resolve" = [ "YES", "NO"]
+
+[GROUPS.Biden2ndTerm]
+"https://manifold.markets/NcyRocks/will-joe-biden-run-for-president-in" = [ "YES", "NO"]
+"https://manifold.markets/LivInTheLookingGlass/will-joe-biden-seek-a-second-term-i" = [ "YES", "NO"]
+
+[GROUPS.Putin2023]
+"https://manifold.markets/ahalekelly/will-vladimir-putin-still-be-the-le" = [ "YES", "NO"]
+"https://manifold.markets/njmkw/if-ukraine-recaptures-cherson-in-20-abc72a4594fc" = [ "YES", "NO"]
+
+[GROUPS.BidenImpeached]
+"https://manifold.markets/Predictor/will-joe-biden-get-impeached-in-his" = [ "YES", "NO"]
+"https://manifold.markets/MP/will-biden-be-impeached-by-2025" = [ "YES", "NO"]
+
+[GROUPS.2030Hosts]
+"https://manifold.markets/Nostradamnedus/will-australia-host-or-cohost-the-2" = [ "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/egroj/will-spain-and-portugal-cohost-the" = [ "NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/egroj/will-morocco-host-the-2030-fifa-wor" = [ "NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/egroj/will-south-america-host-the-2030-fi" = [ "NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/egroj/will-china-host-the-2030-fifa-world" = [ "NO", "NO", "NO", "NO", "YES", "NO"]
+
+[GROUPS.BidenVSTrump]
+"https://manifold.markets/MarketManagerBot/will-the-2024-presidential-race-be" = [ "YES", "NO"]
+"https://manifold.markets/BoltonBailey/will-the-2024-election-be-a-bidentr" = [ "YES", "NO"]
+
+# [GROUPS.NATO]
+# "https://manifold.markets/TimP/will-nato-expand-in-2022" = [ "YES", "ZERO"]
+# "https://manifold.markets/PaulIHuse/will-any-new-country-become-members" = [ "YES", "ZERO"]
+# "https://manifold.markets/GustavoLacerda/finland-joins-nato-in-2022" = [ "YES", "NO"]
+# "https://manifold.markets/PedroMonteiro/will-filnland-join-nato-until-the-e" = [ "YES", "NO"]
+# "https://manifold.markets/c/will-finland-be-an-official-member" = [ "YES", "ZERO"]
+
+# [GROUPS."Article 5"]
+# "https://manifold.markets/BTE/will-a-nato-country-claim-article-5" = [ "YES", "NO"]
+# "https://manifold.markets/MetaculusBot/will-any-nato-country-invoke-articl" = [ "YES", "NO"]
+# "https://manifold.markets/AlexisAnand/nato-article-5-invoked-before-the-e" = [ "YES", "ZERO"]
+
+# [GROUPS."Article 4"]
+# "https://manifold.markets/kolotom99/will-any-nato-member-country-invoke" = [ "YES", "NO"]
+# "https://manifold.markets/kolotom99/will-any-nato-member-country-invoke-a67e0d85f40a" = [ "YES", "ZERO"]
+
+# [GROUPS.COVID0]
+# "https://manifold.markets/Yev/will-boklams-market-about-covid-zer" = [ "NO", "NO", "NO", "NO", "NO", "NO", "YES", "YES", "YES"]
+# "https://manifold.markets/Yev/will-manifoldmarketss-market-about" = [ "NO", "NO", "YES", "NO", "NO", "YES", "NO", "NO", "YES"]
+# "https://manifold.markets/Electricitypipe/will-the-will-chinas-covid-zero-pol" = [ "NO", "YES", "YES", "YES", "NO", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/Boklam/will-chinas-covid-zero-policy-end-i" = [ "YES", "YES", "YES", "NO", "NO", "NO", "ZERO", "ZERO", "ZERO"]
+# "https://manifold.markets/ManifoldMarkets/china-officially-abandons-covid-zer" = [ "YES", "NO", "ZERO", "YES", "NO", "ZERO", "YES", "NO", "ZERO"]
+
+[GROUPS."Tesla CEO"] # steps down in eoy 2023, forced out in 2023, new ceo in 2023, none
+"https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "NO", "NO", "YES"]
+"https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "YES", "ZERO", "NO"]
+"https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["ZERO", "ZERO", "YES", "NO"]
+
+# [GROUPS."Do Kwon"]
+# "https://manifold.markets/3IC/will-do-kwon-be-apprehended-before" = [ "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/Gigacasting/will-do-kwon-be-captured-by-eoy" = [ "YES", "YES", "NO", "NO"]
+# "https://manifold.markets/Gigacasting/will-do-kwon-be-convicted-of-a-crim" = [ "YES", "YES", "YES", "NO"]
+
+# [GROUPS."Bitcoin 2022"]
+# "https://manifold.markets/Gigacasting/bitcoin-closes-the-year-15k" = [ "YES", "YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/BTE/will-bitcoin-close-the-year-above-1" = [ "NO", "NO", "YES", "YES", "YES", "YES"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-78b8ed2ac2f3" = [ "NO", "NO", "YES", "YES", "YES", "YES"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o" = [ "NO", "YES", "YES", "YES", "YES", "YES"]
+# "https://manifold.markets/SneakySly/will-bitcoin-close-the-year-above-1-942e25e8a016" = [ "NO", "NO", "NO", "YES", "YES", "YES"]
+# "https://manifold.markets/morewings/will-bitcoin-close-the-year-above-1-f64fc748dd1c" = [ "NO", "NO", "NO", "NO", "YES", "YES"]
+# "https://manifold.markets/tofu/will-bitcoin-close-the-year-above-1-61bdf637dd3e" = [ "NO", "NO", "NO", "NO", "NO", "YES"]
+
+# [GROUPS.Destiny]
+# "https://manifold.markets/AmmonLam/will-destiny-reach-600k-subscribers-13667af8954e" = [ "YES", "NO"]
+# "https://manifold.markets/AlexKirigiya/will-destiny-reach-600k-subscribers-f4af7ec9bbed" = [ "YES", "NO"]
+# "https://manifold.markets/Lifejacker/will-destiny-reach-600k-subscribers-99e4d1352f37" = [ "YES", "NO"]
+
+[GROUPS."Musk Richest Man"]
+"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO"]
+"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO"]
