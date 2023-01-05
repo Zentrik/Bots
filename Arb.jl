@@ -1,6 +1,5 @@
-using Revise, ManifoldMarkets, TOML, Optimization, OptimizationBBO
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates
 
-#%%
 struct Group
     name::String
     slugs::Vector{String}
@@ -35,42 +34,46 @@ function execute(bet, APIKEY)
     createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
 end
 
-function f(group, markets, limitOrdersBySlug, currentNoShares, currentYesShares, betAmount)
-    newProb = zeros(group.noMarkets)
+function f(betAmount, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+    newProb = [markets[slug].probability for slug in group.slugs]
     noShares = zeros(group.noMarkets)
     yesShares = zeros(group.noMarkets)
 
     fees = 0.
 
-    for (i, slug) in enumerate(group.slugs)
+    for (i, j) in enumerate(bettableSlugsIndex)
+        slug = group.slugs[j]
         market = markets[slug]
+
         shares = betToShares(market, limitOrdersBySlug[slug], betAmount[i]).shares
-        newProb[i] = betToShares(market, limitOrdersBySlug[slug], betAmount[i]).probability
+        newProb[j] = betToShares(market, limitOrdersBySlug[slug], betAmount[i]).probability
 
         if betAmount[i] >= 1
-            yesShares[i] += shares
+            yesShares[j] += shares
             fees += 0.1
         elseif betAmount[i] <= -1
-            noShares[i] += shares
+            noShares[j] += shares
             fees += 0.1
         else
             betAmount[i] = 0
         end
     end
 
-    profitsByEvent = group.y_matrix * (yesShares + currentYesShares) + group.n_matrix * (noShares + currentNoShares) .- sum(abs.(betAmount)) .- fees
+    profitsByEvent = group.y_matrix * (yesShares + getindex.(Ref(yesSharesBySlug), group.slugs)) + group.n_matrix * (noShares + getindex.(Ref(noSharesBySlug), group.slugs)) .- sum(abs.(betAmount)) .- fees
 
-    return (profitsByEvent=profitsByEvent, yesShares=yesShares, noShares=noShares, newProbability=newProb)
+    return (profitsByEvent=profitsByEvent, noShares=noShares, yesShares=yesShares, newProbability=newProb)
 end
 
-function optimise(group, markets, limitOrdersBySlug, maxBetAmount, noShares, yesShares)    
-    profitF = OptimizationFunction((betAmount, _) -> -minimum( f(group, markets, limitOrdersBySlug, noShares, yesShares, betAmount).profitsByEvent ))
-    x0 = repeat([0], group.noMarkets)
-    lb = repeat([-maxBetAmount], group.noMarkets)
-    ub = repeat([maxBetAmount], group.noMarkets)
-    problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub, progress=true)
+function optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)    
+    profitF = OptimizationFunction((betAmount, _) -> -minimum( f(betAmount, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex).profitsByEvent ))
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxiters=100000, maxtime=20.0)
+    x0 = repeat([0.], length(bettableSlugsIndex))
+    lb = repeat([-maxBetAmount], length(bettableSlugsIndex))
+    ub = repeat([maxBetAmount], length(bettableSlugsIndex))
+
+    problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
+
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin(), maxtime=30.0)
 
     return sol
 end
@@ -111,22 +114,24 @@ function getSlugs(groups::Vector{Group})
     return mapreduce(group -> group.slugs, vcat, groups)
 end
 
+isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
+
 function processGroups!(GROUPS, markets)
+    # Remove any group with no open markets
+
     for (name, group) in GROUPS
+        allClosed = true
+
         for url in keys(group)
             slug = urlToSlug(url)
 
             market = markets[slug]
-            if market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds, resolved check should be redundant
-                pop!(GROUPS[name], url)
+            if !isMarketClosingSoon(market)
+                allClosed = false
             end
         end
-    end
 
-    # Remove any groups that have no/one markets left
-
-    for (name, group) in GROUPS
-        if length(group) <= 1
+        if allClosed
             pop!(GROUPS, name)
         end
     end
@@ -179,9 +184,9 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
 
     noSharesBySlug, yesSharesBySlug = calculateShares(groups, betsByMe)
 
-    sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, getindex.(Ref(noSharesBySlug), group.slugs), getindex.(Ref(yesSharesBySlug), group.slugs)), groups)
+    # sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, groups))
 
-    for (sol, group) in zip(sols, groups)
+    for group in groups
         plannedBets = PlannedBet[]
         
         println("=== $(group.name) ===")
@@ -194,14 +199,22 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
         #         print("Skipping group.\n")
         #         return
 
-        betAmounts = sol.u
-        newProfitsByEvent, yesShares, noShares, newProb = f(group, markets, limitOrdersBySlug, getindex.(Ref(noSharesBySlug), group.slugs), getindex.(Ref(yesSharesBySlug), group.slugs), betAmounts)
+        bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
 
-        oldProfitsByEvent = f(group, markets, limitOrdersBySlug, getindex.(Ref(noSharesBySlug), group.slugs), getindex.(Ref(yesSharesBySlug), group.slugs), repeat([0.], group.noMarkets)).profitsByEvent
+        solution = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+        betAmounts = solution.u
+        newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+
+        oldProfitsByEvent, _, _, oldProb = f(repeat([0.], group.noMarkets), group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+
         profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
 
         if printDebug
+            println(bettableSlugsIndex)
+            println()
+            println(oldProb)
             println(newProb)
+            println()
             println(oldProfitsByEvent)
             println(newProfitsByEvent)
             println(profit)
@@ -211,18 +224,19 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
             println(group.y_matrix)
             println(group.n_matrix)
             println()
+            println(yesShares)
+            println(noShares)
             println(group.y_matrix * yesShares)
             println(group.n_matrix * noShares)
             println(sum(abs.(betAmounts)))
-        end
-        
-        if profit <= .01 * group.noMarkets
-            print()
-            println("Insufficient profit $(profit) for $(group.noMarkets) markets\n")
-            continue
+            println()
         end
 
-        for (i, (amount, slug)) in enumerate(zip(betAmounts, group.slugs))
+        skipMarket = false
+        for (i, j) in enumerate(bettableSlugsIndex)
+            amount = betAmounts[i]
+            slug = group.slugs[j]
+
             if isapprox(amount, 0., atol=1e-6)
                 continue
             elseif abs(amount) >= 1.
@@ -230,16 +244,30 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
                 push!(plannedBets, bet)
             else
                 println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
+                skipMarket = true
+                break
             end
 
-            println()
             println(slug)
             println("Prior probs:    ", markets[slug].probability)
             println("Posterior probs:", newProb[i])
+            println()
         end
 
-        println()
-        println("Profits:", profit)
+        if skipMarket
+            continue
+        end
+
+        # println()
+        # println("Profits:", profit)
+
+                
+        if profit <= .01 * length(plannedBets)
+            # print()
+            println("Insufficient profit $(profit) for $(length(plannedBets)) bets\n")
+            continue
+        end
+        println("Profits: $profit")
 
         for bet in plannedBets
             println(bet)
@@ -270,18 +298,46 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
     end
 end
 
-function run(;live=false, confirmBets=true, printDebug=true)
+function run(groupNames = nothing ;live=false, confirmBets=true, printDebug=true)
     data = TOML.parsefile("ArbBot/Arb.toml")
     GROUPS = data["GROUPS"]
     APIKEY = data["APIKEY"]
     USERNAME = data["USERNAME"]
+
+    if groupNames !== nothing
+        GROUPS = Dict(name => data["GROUPS"][name] for name in groupNames)
+    end
     
-    slugs = getSlugs(GROUPS)
-    markets = getMarkets(slugs)
-    processGroups!(GROUPS, markets)
+    # slugs = getSlugs(GROUPS)
+    # markets = getMarkets(slugs)
+    # processGroups!(GROUPS, markets)
 
     arbitrage(GROUPS, APIKEY, USERNAME, live, confirmBets, printDebug)
 end
 
-run()
+# run()
 # run(live=true)
+# run(["Next Speaker of the House"])
+
+function prod(groupNames = nothing;live=true, confirmBets=false, printDebug=false)
+    data = TOML.parsefile("ArbBot/Arb.toml")
+    GROUPS = data["GROUPS"]
+    APIKEY = data["APIKEY"]
+    USERNAME = data["USERNAME"]
+
+    if groupNames !== nothing
+        GROUPS = Dict(name => data["GROUPS"][name] for name in groupNames)
+    end
+    
+    # slugs = getSlugs(GROUPS)
+    # markets = getMarkets(slugs)
+    # processGroups!(GROUPS, markets)
+
+    while true
+        # oldTime = time()
+        println("Running at $(Dates.format(now(), "HH:MM:SS.sss"))")
+        arbitrage(GROUPS, APIKEY, USERNAME, live, confirmBets, printDebug)
+        println("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))")
+        sleep(1.5*60) # - (time() - oldTime)
+    end
+end
