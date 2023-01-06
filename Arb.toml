@@ -59,21 +59,25 @@ USERNAME = "Bot"
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO"]
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO"]
 
-[GROUPS."Next Speaker of the House"] # McCarthy <218, McCarthy >=218, Scalise, Jordan, Trump, Not a member whos not trump, None
-"https://manifold.markets/BTE/will-kevin-mccarthy-be-the-next-spe" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/jack/will-kevin-mccarthy-be-next-speaker" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/BoltonBailey/will-kevin-mccarthy-be-the-next-spe-c8186c01015f" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/jack/will-mccarthy-be-elected-next-speak" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = [0, "YES", 0, 0, 0, 0, "NO"]
+[GROUPS."Next Speaker of the House"] # McCarthy <218, McCarthy >=218, Scalise, Jordan, Trump, Upton, Not a member whos not trump or upton, None
+"https://manifold.markets/BTE/will-kevin-mccarthy-be-the-next-spe" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-kevin-mccarthy-be-next-speaker" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/BoltonBailey/will-kevin-mccarthy-be-the-next-spe-c8186c01015f" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/jack/will-jim-jordan-be-next-speaker-of" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-mccarthy-be-elected-next-speak" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/jack/will-steve-scalise-rla-be-next-spea" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = [0, "YES", 0, 0, 0, 0, 0, "NO"]
 
-"https://manifold.markets/BTE/will-donald-trump-be-the-next-speak" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/jack/will-jim-jordan-be-next-speaker-of" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/BTE/will-the-house-elect-a-speaker-who" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
-"https://manifold.markets/jack/will-the-next-speaker-of-the-house" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
+"https://manifold.markets/jack/will-steve-scalise-rla-be-next-spea" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+
+"https://manifold.markets/BTE/will-donald-trump-be-the-next-speak" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+
+"https://manifold.markets/BTE/will-fred-upton-be-elected-speaker" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+
+"https://manifold.markets/BTE/will-the-house-elect-a-speaker-who" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/jack/will-the-next-speaker-of-the-house" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
 
 [GROUPS."Speaker of the House Date"] # [now, Friday], (Friday, 14], (14, 31], in Feb, none
 "https://manifold.markets/AlexLiesman/will-we-have-a-speaker-of-the-house" = ["YES", "NO", "NO", "NO", "NO"]

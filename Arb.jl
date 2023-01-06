@@ -1,4 +1,4 @@
-using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, ThreadsX
 
 struct Group
     name::String
@@ -35,9 +35,10 @@ function execute(bet, APIKEY)
     response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        println(market.question)
-        println(market.url)
+        println(bet.market.question)
+        println(bet.market.url)
         println(response)
+        println(response.fills)
     end
 end
 
@@ -80,7 +81,7 @@ function optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlu
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=10.0)
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3.0)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex).profitsByEvent |> minimum
@@ -241,14 +242,17 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
 
     limitOrdersBySlug, splitBets = getLimits(groups, betsBySlug)
 
-    totalNumberOfMarkets = mapreduce(group -> group.noMarkets, +, groups)
-    maxBetAmount = getUserByUsername(USERNAME).balance / (3 + totalNumberOfMarkets)
+    # totalNumberOfMarkets = mapreduce(group -> group.noMarkets, +, groups)
+    maxNumberOfMarkets = mapreduce(group -> group.noMarkets, max, groups)
+    maxBetAmount = getUserByUsername(USERNAME).balance / (3 + 1.5*maxNumberOfMarkets)
 
     noSharesBySlug, yesSharesBySlug = calculateShares(groups, betsByMe)
 
     # sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, groups))
+    sols = ThreadsX.map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
+    markets = getMarkets(getSlugs(GROUPS))
 
-    for group in groups
+    for (groupNumber, group) in enumerate(groups)
         plannedBets = PlannedBet[]
         
         # for market in markets:
@@ -263,7 +267,8 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
 
         bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
 
-        betAmounts = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+        # betAmounts = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+        betAmounts = sols[groupNumber]
 
         newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
 
@@ -307,7 +312,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
             if isapprox(amount, 0., atol=1e-6)
                 continue
             elseif abs(amount) >= 1.
-                bet = PlannedBet(abs(amount), yesShares[i] + noShares[i], amount > 0. ? "YES" : "NO", markets[slug])
+                bet = PlannedBet(abs(amount), yesShares[j] + noShares[j], amount > 0. ? "YES" : "NO", markets[slug])
                 push!(plannedBets, bet)
             else
                 if !printedGroupName
@@ -326,7 +331,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
 
             printstyled("$slug\n", color=:red)
             println("Prior probs:     $(markets[slug].probability * 100)%")
-            println("Posterior probs: $(newProb[i]*100)%")
+            println("Posterior probs: $(newProb[j]*100)%")
         end
 
         if skipMarket
@@ -377,8 +382,8 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
         # end
 
         if live
-            for bet in plannedBets
-                @async execute(bet, APIKEY)
+            @sync for bet in plannedBets
+                @async execute(bet, APIKEY) # don't async in case it interferes with sleep
             # print(f"Balance: {my_balance()}\n")
             end
         end
@@ -425,6 +430,6 @@ function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=fal
         printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
         arbitrage(GROUPS, APIKEY, USERNAME, live, confirmBets, printDebug)
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
-        sleep(1*60) # - (time() - oldTime)
+        sleep(15) # - (time() - oldTime)
     end
 end
