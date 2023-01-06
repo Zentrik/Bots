@@ -1,4 +1,4 @@
-using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics
 
 struct Group
     name::String
@@ -27,11 +27,18 @@ struct PlannedBet
 end
 
 function Base.show(io::IO, plannedBet::PlannedBet)
-    print(io, "$(plannedBet.market.question)\n  Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
+    printstyled(io, "$(plannedBet.market.question)\n", color=:green)
+    print(io, "Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
 end
 
 function execute(bet, APIKEY)
-    createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
+    response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
+    # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
+    if response.shares ≉ bet.shares
+        println(market.question)
+        println(market.url)
+        println(response)
+    end
 end
 
 function f(betAmount, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
@@ -73,15 +80,50 @@ function optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlu
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin(), maxtime=30.0)
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=10.0)
 
-    return sol
+    bestSolution = repeat([0.], length(bettableSlugsIndex))
+    maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex).profitsByEvent |> minimum
+
+    nonZeroIndices = findall(!iszero, sol.u)
+
+    for indices in powerset(nonZeroIndices)
+        betAmount = copy(sol.u)
+        betAmount[indices] .= 0
+
+        riskFreeProfit = f(betAmount, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex).profitsByEvent |> minimum
+
+        if riskFreeProfit > maxRiskFreeProfit
+            maxRiskFreeProfit = riskFreeProfit
+            bestSolution = betAmount
+        end
+    end
+
+    return bestSolution
 end
+
+# macro async_showerr(ex) # breaks @sync
+#     quote
+#         t = @async try
+#             eval($(esc(ex)))
+#         catch err
+#             bt = catch_backtrace()
+#             println()
+#             showerror(stderr, err, bt)
+#         end
+#     end
+# end
 
 function getMarkets(slugs)
     markets = Dict{String, Market}()
     @sync for slug in slugs
-        @async markets[slug] = getMarketBySlug(slug)
+        @async try
+            markets[slug] = getMarketBySlug(slug)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+        end
     end
 
     return markets
@@ -95,9 +137,29 @@ function getMarketsAndBets(GROUPS, USERNAME)
     @sync for group in values(GROUPS), url in keys(group)
         slug = urlToSlug(url)
 
-        @async markets[slug] = getMarketBySlug(slug)
-        @async betsBySlug[slug] = getBets(slug=slug)
-        @async betsByMe[slug] = getBets(slug=slug, username=USERNAME)
+        @async try
+            markets[slug] = getMarketBySlug(slug)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+        end
+
+        @async try
+            betsBySlug[slug] = getBets(slug=slug)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+        end
+
+        @async try
+            betsByMe[slug] = getBets(slug=slug, username=USERNAME)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+        end
     end
 
     return (markets=markets, betsBySlug=betsBySlug, betsByMe=betsByMe)
@@ -189,8 +251,6 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
     for group in groups
         plannedBets = PlannedBet[]
         
-        println("=== $(group.name) ===")
-
         # for market in markets:
         #     skip = skip_market(market)
         #     if skip:
@@ -199,17 +259,22 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
         #         print("Skipping group.\n")
         #         return
 
+        printedGroupName = false
+
         bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
 
-        solution = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
-        betAmounts = solution.u
+        betAmounts = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+
         newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
 
-        oldProfitsByEvent, _, _, oldProb = f(repeat([0.], group.noMarkets), group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+        oldProfitsByEvent, _, _, oldProb = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
 
         profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
 
         if printDebug
+            printstyled("=== $(group.name) ===\n", color=:bold)
+            printedGroupName = true
+
             println(bettableSlugsIndex)
             println()
             println(oldProb)
@@ -224,6 +289,8 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
             println(group.y_matrix)
             println(group.n_matrix)
             println()
+            println(getindex.(Ref(yesSharesBySlug), group.slugs))
+            println(getindex.(Ref(noSharesBySlug), group.slugs))
             println(yesShares)
             println(noShares)
             println(group.y_matrix * yesShares)
@@ -243,15 +310,23 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
                 bet = PlannedBet(abs(amount), yesShares[i] + noShares[i], amount > 0. ? "YES" : "NO", markets[slug])
                 push!(plannedBets, bet)
             else
+                if !printedGroupName
+                    printstyled("=== $(group.name) ===\n", color=:bold)
+                    printedGroupName = true
+                end
                 println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
                 skipMarket = true
                 break
             end
 
-            println(slug)
-            println("Prior probs:    ", markets[slug].probability)
-            println("Posterior probs:", newProb[i])
-            println()
+            if !printedGroupName
+                printstyled("=== $(group.name) ===\n", color=:bold)
+                printedGroupName = true
+            end
+
+            printstyled("$slug\n", color=:red)
+            println("Prior probs:     $(markets[slug].probability * 100)%")
+            println("Posterior probs: $(newProb[i]*100)%")
         end
 
         if skipMarket
@@ -264,10 +339,22 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
                 
         if profit <= .01 * length(plannedBets)
             # print()
-            println("Insufficient profit $(profit) for $(length(plannedBets)) bets\n")
+            if !isempty(plannedBets)
+                if !printedGroupName
+                    printstyled("=== $(group.name) ===\n", color=:bold)
+                    printedGroupName = true
+                end
+
+                println("Insufficient profit $(profit) for $(length(plannedBets)) bets")
+            end
             continue
         end
-        println("Profits: $profit")
+
+        if !printedGroupName
+            printstyled("=== $(group.name) ===\n", color=:bold)
+            printedGroupName = true
+        end
+        printstyled("Profits:         $profit\n", color=:yellow)
 
         for bet in plannedBets
             println(bet)
@@ -291,14 +378,14 @@ function arbitrage(GROUPS, APIKEY, USERNAME, live=false, confirmBets=true, print
 
         if live
             for bet in plannedBets
-                execute(bet, APIKEY)
+                @async execute(bet, APIKEY)
             # print(f"Balance: {my_balance()}\n")
             end
         end
     end
 end
 
-function run(groupNames = nothing ;live=false, confirmBets=true, printDebug=true)
+function run(groupNames = nothing; live=false, confirmBets=true, printDebug=true)
     data = TOML.parsefile("ArbBot/Arb.toml")
     GROUPS = data["GROUPS"]
     APIKEY = data["APIKEY"]
@@ -319,7 +406,7 @@ end
 # run(live=true)
 # run(["Next Speaker of the House"])
 
-function prod(groupNames = nothing;live=true, confirmBets=false, printDebug=false)
+function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=false)
     data = TOML.parsefile("ArbBot/Arb.toml")
     GROUPS = data["GROUPS"]
     APIKEY = data["APIKEY"]
@@ -335,9 +422,9 @@ function prod(groupNames = nothing;live=true, confirmBets=false, printDebug=fals
 
     while true
         # oldTime = time()
-        println("Running at $(Dates.format(now(), "HH:MM:SS.sss"))")
+        printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
         arbitrage(GROUPS, APIKEY, USERNAME, live, confirmBets, printDebug)
-        println("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))")
-        sleep(1.5*60) # - (time() - oldTime)
+        printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
+        sleep(1*60) # - (time() - oldTime)
     end
 end

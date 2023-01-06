@@ -74,3 +74,32 @@ USERNAME = "Bot"
 
 "https://manifold.markets/BTE/will-the-house-elect-a-speaker-who" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
 "https://manifold.markets/jack/will-the-next-speaker-of-the-house" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
+
+[GROUPS."Speaker of the House Date"] # [now, Friday], (Friday, 14], (14, 31], in Feb, none
+"https://manifold.markets/AlexLiesman/will-we-have-a-speaker-of-the-house" = ["YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-the-next-speaker-of-the-house-6343de212294" = ["YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/BoltonBailey/will-the-next-speaker-of-the-house-e36e7e54da5e" = ["YES", "NO", "NO", "NO", "NO"]
+
+"https://manifold.markets/PeterWildeford/will-we-get-a-speaker-of-the-house" = ["YES", "YES", "NO", "NO", "NO"]
+
+"https://manifold.markets/Deeve/will-the-speaker-of-the-house-be-ch" = ["YES", "YES", "YES", "NO", "NO"]
+
+"https://manifold.markets/BoltonBailey/will-a-new-speaker-of-the-house-be" = ["YES", "YES", "YES", "YES", "NO"]
+
+# [GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
+# "https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
+#                                                                                   "NO", "NO", "NO",
+#                                                                                   0, 0, 0]
+# "https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", 0,
+#                                                                        "YES", "NO", 0,
+#                                                                        "YES", "NO", 0]
+# "https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
+#                                                                       "YES", "NO", "YES",
+#                                                                       "YES", "YES", "NO"]
+# "https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "YES",
+#                                                                       "NO", "NO", "YES",
+#                                                                       "NO", "NO", "YES"]
+
+[GROUPS."Nuclear Weapons Detonation 2023"]
+"https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-b71e74f6a8e4" = ["YES", "NO"]
+"https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-af0ba4d66245" = ["YES", "NO"]
