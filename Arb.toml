@@ -79,10 +79,11 @@ USERNAME = "Bot"
 
 "https://manifold.markets/April/will-either-joe-biden-or-donald-tru" = ["YES", "YES", "NO", "NO", "NO"]
 
-[GROUPS."Tesla CEO"] # steps down in eoy 2023, forced out in 2023, new ceo in 2023, none
-"https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "NO", "NO", "YES"]
-"https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "YES", "ZERO", "NO"]
-"https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["ZERO", "ZERO", "YES", "NO"]
+[GROUPS."Tesla CEO"] # steps down in eoy 2023 and not new ceo, and new  ceo, forced out in 2023 and not new ceo, and new ceo in 2023, stays CEO 2023
+"https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "NO", "NO", "NO", "YES"]
+"https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["NO", "YES", "NO", "YES", "NO"]
+"https://manifold.markets/Bot/will-elon-musk-be-forced-out-as-tes" = ["NO", "NO", "YES", "YES", "NO"]
 
 [GROUPS."Musk Richest Man"]
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO"]
@@ -180,7 +181,7 @@ USERNAME = "Bot"
 "https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-m" = ["YES", "YES", "YES", "NO", "NO"]
 "https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-a" = ["YES", "YES", "YES", "YES", "NO"]
 
-["SBF.Jail Time"]
+[GROUPS."SBF Jail Time"]
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-year-in" = ["YES", "NO", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-three-month" = ["YES", "YES", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-month-i" = ["YES", "YES", "YES", "NO"]
@@ -188,3 +189,15 @@ USERNAME = "Bot"
 [GROUPS."Santos"] # Expelled, retires/etc, none
 "https://manifold.markets/jack/will-george-santos-rny-be-expelled" = ["YES", "NO", "NO"]
 "https://manifold.markets/lisamarsh/will-rep-george-santos-rny-remain-i" = ["NO", "NO", "YES"]
+
+[GROUPS."Pope Francis"] # resigns 2023, no longer in 2023 not resigned, is for 2023 but no longer in 2024 and not new pope, and new pope by 17th December 2024, still pope 2024
+"https://manifold.markets/jack/will-pope-francis-resign-by-end-of" = ["YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/kolotom99/will-pope-francis-jorge-m-bergoglio" = ["NO", "NO", "YES", "YES", "YES"]
+"https://manifold.markets/kolotom99/will-pope-francis-jorge-m-bergoglio-f2b1667dab11" = ["NO", "NO", "NO", "NO", "YES"]
+"https://manifold.markets/humblestumble/will-there-be-a-new-pope-elected-by" = ["YES", "YES", "NO", "YES", "NO"]
+
+[GROUPS."US Government Shutdown 2023"]
+"https://manifold.markets/brwa/will-there-be-a-government-shutdown" = ["YES", "NO"]
+"https://manifold.markets/Nostradamnedus/will-there-be-a-us-government-shutd-26492e3c554d" = ["YES", "NO"]
+"https://manifold.markets/connorcash/will-there-be-a-us-government-shutd" = ["YES", "NO"]
+# "https://manifold.markets/EliGaultney/will-the-us-government-shut-down-on" = ["YES", "NO"]

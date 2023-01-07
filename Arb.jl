@@ -296,7 +296,8 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
     # sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
     # sols = ThreadsX.map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
 
-    for (groupNumber, group) in enumerate(groups)
+    executedBetPairs = []
+    @sync for (groupNumber, group) in enumerate(groups)
         plannedBets = PlannedBet[]
         
         # for market in markets:
@@ -419,10 +420,21 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
 
         if live
             for bet in plannedBets 
-                newBet = execute(bet, APIKEY) # don't async here in case it interferes with sleep and shares update?
-                updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(bet.market.url), newBet)
+                @async try
+                    push!(executedBetPairs, (bet, execute(bet, APIKEY)))
+                catch err
+                    bt = catch_backtrace()
+                    println()
+                    showerror(stderr, err, bt)
+                end
             # print(f"Balance: {my_balance()}\n")
             end
+        end
+    end
+
+    if live
+        for (plannedBet, executedBet) in executedBetPairs
+            updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(plannedBet.market.url), executedBet)
         end
     end
 end
