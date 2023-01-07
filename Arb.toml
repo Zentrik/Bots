@@ -50,6 +50,35 @@ USERNAME = "Bot"
 "https://manifold.markets/MarketManagerBot/will-the-2024-presidential-race-be" = [ "YES", "NO"]
 "https://manifold.markets/BoltonBailey/will-the-2024-election-be-a-bidentr" = [ "YES", "NO"]
 
+[GROUPS."Democratic Nominee"] # Biden, Harris, Warren, Newsom, Buttigieg, Psaki, Other
+"https://manifold.markets/NathanpmYoung/will-biden-be-the-2024-democratic-n" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-kamala-harris-be-the-democrati" = ["NO", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-elizabeth-warren-be-the-democr" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-gavin-newsom-be-the-democratic" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/JamesGrugett/will-pete-buttigieg-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/dglid/will-jen-psaki-be-the-2024-democrat" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO"]
+
+"https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES"]
+
+
+[GROUPS."Republican Nominee"] # DeSantis, Trump, Pence, Haley, Pompeo, Other
+"https://manifold.markets/SG/will-ron-desantis-be-the-2024-repub" = ["YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/BruceGrugett/will-donald-trump-be-the-republican" = ["NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/RichardShu/will-donald-trump-be-the-republican-1120636b600a" = ["NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-mike-pence-be-the-republican-n" = ["NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-nikki-haley-be-the-republican" = ["NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-mike-pompeo-be-the-republican" = ["NO", "NO", "NO", "NO", "YES", "NO"]
+
+"https://manifold.markets/Gigacasting/will-the-republican-nominee-be-eith" = ["YES", "YES", "NO", "NO", "NO", "NO"]
+
+[GROUPS."Winner of 2024 Presidential Election"] # Biden, Trump, DeSantis, Newsom, Other
+"https://manifold.markets/LarsDoucet/will-joe-biden-win-the-2024-us-pres" = ["YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/LarsDoucet/will-donald-trump-win-the-2024-us-p" = ["NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-ron-desantis-be-elected-us-pre" = ["NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/MartinRandall/will-gavin-newsom-win-the-2024-pres" = ["NO", "NO", "NO", "YES", "NO"]
+
+"https://manifold.markets/April/will-either-joe-biden-or-donald-tru" = ["YES", "YES", "NO", "NO", "NO"]
+
 [GROUPS."Tesla CEO"] # steps down in eoy 2023, forced out in 2023, new ceo in 2023, none
 "https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "NO", "NO", "YES"]
 "https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "YES", "ZERO", "NO"]
@@ -59,51 +88,103 @@ USERNAME = "Bot"
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO"]
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO"]
 
-[GROUPS."Next Speaker of the House"] # McCarthy <218, McCarthy >=218, Scalise, Jordan, Trump, Upton, Not a member whos not trump or upton, None
-"https://manifold.markets/BTE/will-kevin-mccarthy-be-the-next-spe" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/jack/will-kevin-mccarthy-be-next-speaker" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/BoltonBailey/will-kevin-mccarthy-be-the-next-spe-c8186c01015f" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+# [GROUPS."Next Speaker of the House"] # McCarthy <218, McCarthy >=218, Scalise, Jordan, Trump, Upton, Not a member whos not trump or upton, None
+# "https://manifold.markets/BTE/will-kevin-mccarthy-be-the-next-spe" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/jack/will-kevin-mccarthy-be-next-speaker" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/BoltonBailey/will-kevin-mccarthy-be-the-next-spe-c8186c01015f" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/jack/will-mccarthy-be-elected-next-speak" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/jack/will-mccarthy-be-elected-next-speak" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = [0, "YES", 0, 0, 0, 0, 0, "NO"]
+# "https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = [0, "YES", 0, 0, 0, 0, 0, "NO"]
 
-"https://manifold.markets/jack/will-jim-jordan-be-next-speaker-of" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/jack/will-jim-jordan-be-next-speaker-of" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/jack/will-steve-scalise-rla-be-next-spea" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/jack/will-steve-scalise-rla-be-next-spea" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/BTE/will-donald-trump-be-the-next-speak" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/BTE/will-donald-trump-be-the-next-speak" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
 
-"https://manifold.markets/BTE/will-fred-upton-be-elected-speaker" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+# "https://manifold.markets/BTE/will-fred-upton-be-elected-speaker" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
 
-"https://manifold.markets/BTE/will-the-house-elect-a-speaker-who" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/jack/will-the-next-speaker-of-the-house" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/BTE/will-the-house-elect-a-speaker-who" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/jack/will-the-next-speaker-of-the-house" = ["NO", "NO", "NO", "NO", "YES", "YES", "YES", "NO"]
 
-[GROUPS."Speaker of the House Date"] # [now, Friday], (Friday, 14], (14, 31], in Feb, none
-"https://manifold.markets/AlexLiesman/will-we-have-a-speaker-of-the-house" = ["YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/jack/will-the-next-speaker-of-the-house-6343de212294" = ["YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/BoltonBailey/will-the-next-speaker-of-the-house-e36e7e54da5e" = ["YES", "NO", "NO", "NO", "NO"]
+# [GROUPS."Speaker of the House Date"] # [now, Friday], (Friday, 14], (14, 31], in Feb, none
+# "https://manifold.markets/AlexLiesman/will-we-have-a-speaker-of-the-house" = ["YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/jack/will-the-next-speaker-of-the-house-6343de212294" = ["YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/BoltonBailey/will-the-next-speaker-of-the-house-e36e7e54da5e" = ["YES", "NO", "NO", "NO", "NO"]
 
-"https://manifold.markets/PeterWildeford/will-we-get-a-speaker-of-the-house" = ["YES", "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/PeterWildeford/will-we-get-a-speaker-of-the-house" = ["YES", "YES", "NO", "NO", "NO"]
 
-"https://manifold.markets/Deeve/will-the-speaker-of-the-house-be-ch" = ["YES", "YES", "YES", "NO", "NO"]
+# "https://manifold.markets/Deeve/will-the-speaker-of-the-house-be-ch" = ["YES", "YES", "YES", "NO", "NO"]
 
-"https://manifold.markets/BoltonBailey/will-a-new-speaker-of-the-house-be" = ["YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/BoltonBailey/will-a-new-speaker-of-the-house-be" = ["YES", "YES", "YES", "YES", "NO"]
 
-# [GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
-# "https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
-#                                                                                   "NO", "NO", "NO",
-#                                                                                   0, 0, 0]
-# "https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", 0,
-#                                                                        "YES", "NO", 0,
-#                                                                        "YES", "NO", 0]
-# "https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
-#                                                                       "YES", "NO", "YES",
-#                                                                       "YES", "YES", "NO"]
-# "https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "YES",
-#                                                                       "NO", "NO", "YES",
-#                                                                       "NO", "NO", "YES"]
+# [GROUPS."Speaker of the House no. of Ballots"] # 14, 15, (15, 20], (20, 30], none
+# "https://manifold.markets/AndrewG/will-the-speaker-of-the-united-stat-960877dc9c47" = ["YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/AndrewG/will-the-speaker-of-the-united-stat-65f9c6ce274b" = ["NO", "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/AndrewG/will-the-speaker-of-the-united-stat-d5d1cd946b2b" = ["NO", "NO", "YES", "YES", "YES"]
+# "https://manifold.markets/jack/will-the-next-speaker-of-the-house-038cdc36cc58" = ["YES", "YES", "YES", "NO", "NO"]
+# "https://manifold.markets/MichaelBlume/will-the-next-speaker-of-the-house-cebea93804f7" = ["YES", "YES", "YES", "YES", "NO"]
+ 
+[GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
+"https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
+                                                                                  "NO", "NO", "NO",
+                                                                                  0, 0, 0]
+"https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", 0,
+                                                                       "YES", "NO", 0,
+                                                                       "YES", "NO", 0]
+"https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
+                                                                      "YES", "NO", "YES",
+                                                                      "YES", "YES", "NO"]
+"https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "YES",
+                                                                      "NO", "NO", "YES",
+                                                                      "NO", "NO", "YES"]
 
 [GROUPS."Nuclear Weapons Detonation 2023"]
 "https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-b71e74f6a8e4" = ["YES", "NO"]
 "https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-af0ba4d66245" = ["YES", "NO"]
+
+[GROUPS."Russia Mobilisation"]
+"https://manifold.markets/Nostradamnedus/will-russia-begin-a-new-wave-of-mob" = ["YES", "NO", "NO"]
+"https://manifold.markets/kolotom99/will-russia-begin-a-new-wave-of-mob-bb11ce38d81f" = ["YES", "YES", "NO"]
+
+[GROUPS."Trump Indictment"] # in Jan, in Feb, in March, in 2023 bar Jan, Feb, none
+"https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim" = ["YES", "NO", "NO","NO", "NO"]
+"https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim-46f07e93f72b" = ["YES", "YES", "NO","NO", "NO"]
+"https://manifold.markets/Gigacasting/will-trump-be-indicted-by-march-31" = ["YES", "YES", "YES", "NO", "NO"]
+"https://manifold.markets/ACXBot/23-will-donald-trump-get-indicted-o" = ["YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/LivInTheLookingGlass/will-donald-trump-be-indicted-for-a-bd5ee56971ea" = ["YES", "YES", "YES", "YES", "NO"]
+
+[GROUPS."Amazon Layoffs"] # [9, 11), >=11, none
+"https://manifold.markets/firstuserhere/will-amazon-lay-of-9k-or-more-peopl" = ["YES", "YES", "NO"]
+"https://manifold.markets/firstuserhere/will-amazon-lay-off-11k-or-more-peo" = ["NO", "YES", "NO"]
+
+# [GROUPS."SBF Tweet"]
+# "https://manifold.markets/AmmonLam/will-sbf-make-a-tweet-before-jan-10-59daae1923b8" = ["YES", "NO", "NO", "NO"]
+# "https://manifold.markets/AmmonLam/will-sbf-make-a-tweet-before-jan-20-a701ae3c672d" = ["YES", "YES", "NO", "NO"]
+# "https://manifold.markets/AmmonLam/will-sbf-make-a-tweet-before-jan-30-e6e58debe4fc" = ["YES", "YES", "YES", "NO"]
+
+[GROUPS."SBF Sentence Length"] # [10, 20), [20, 50), >=50, none
+"https://manifold.markets/Gigacasting/will-sbf-be-sentenced-to-10-years" = ["YES", "YES", "YES", "NO"]
+"https://manifold.markets/BenjaminIkuta/does-sbf-get-a-sentence-of-20-years" = ["NO", "YES", "YES", "NO"]
+"https://manifold.markets/Gigacasting/will-sbf-be-sentenced-to-20-years" = ["NO", "YES", "YES", "NO"]
+"https://manifold.markets/GeorgeVii/does-sbf-get-a-lifesentence" = ["NO", "NO", "YES", "NO"]
+
+[GROUPS."Sam Sentence Length"] # [1, 4], >4, none
+"https://manifold.markets/GeorgeVii/does-sam-trabucco-get-1-year-senten" = ["YES", "YES", "NO"]
+"https://manifold.markets/GeorgeVii/does-sam-trabucco-get-4-years-sente" = ["NO", "YES", "NO"]
+
+[GROUPS."SBF in Jail"]
+"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-j" = ["YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-f" = ["YES", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-m" = ["YES", "YES", "YES", "NO", "NO"]
+"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-a" = ["YES", "YES", "YES", "YES", "NO"]
+
+["SBF.Jail Time"]
+"https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-year-in" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-sbf-spend-at-least-three-month" = ["YES", "YES", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-month-i" = ["YES", "YES", "YES", "NO"]
+
+[GROUPS."Santos"] # Expelled, retires/etc, none
+"https://manifold.markets/jack/will-george-santos-rny-be-expelled" = ["YES", "NO", "NO"]
+"https://manifold.markets/lisamarsh/will-rep-george-santos-rny-remain-i" = ["NO", "NO", "YES"]
