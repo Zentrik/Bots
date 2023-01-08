@@ -61,15 +61,16 @@ USERNAME = "Bot"
 "https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES"]
 
 
-[GROUPS."Republican Nominee"] # DeSantis, Trump, Pence, Haley, Pompeo, Other
-"https://manifold.markets/SG/will-ron-desantis-be-the-2024-repub" = ["YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/BruceGrugett/will-donald-trump-be-the-republican" = ["NO", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/RichardShu/will-donald-trump-be-the-republican-1120636b600a" = ["NO", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/Gigacasting/will-mike-pence-be-the-republican-n" = ["NO", "NO", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/MarketManagerBot/will-nikki-haley-be-the-republican" = ["NO", "NO", "NO", "YES", "NO", "NO"]
-"https://manifold.markets/MarketManagerBot/will-mike-pompeo-be-the-republican" = ["NO", "NO", "NO", "NO", "YES", "NO"]
+[GROUPS."Republican Nominee"] # DeSantis, Trump, Pence, Haley, Pompeo, Youngkin, Other
+"https://manifold.markets/SG/will-ron-desantis-be-the-2024-repub" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/BruceGrugett/will-donald-trump-be-the-republican" = ["NO", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/RichardShu/will-donald-trump-be-the-republican-1120636b600a" = ["NO", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-mike-pence-be-the-republican-n" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-nikki-haley-be-the-republican" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-mike-pompeo-be-the-republican" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/JimAusman/will-virginia-governor-glenn-youngk" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO"]
 
-"https://manifold.markets/Gigacasting/will-the-republican-nominee-be-eith" = ["YES", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-the-republican-nominee-be-eith" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO"]
 
 [GROUPS."Winner of 2024 Presidential Election"] # Biden, Trump, DeSantis, Newsom, Other
 "https://manifold.markets/LarsDoucet/will-joe-biden-win-the-2024-us-pres" = ["YES", "NO", "NO", "NO", "NO"]
@@ -201,3 +202,32 @@ USERNAME = "Bot"
 "https://manifold.markets/Nostradamnedus/will-there-be-a-us-government-shutd-26492e3c554d" = ["YES", "NO"]
 "https://manifold.markets/connorcash/will-there-be-a-us-government-shutd" = ["YES", "NO"]
 # "https://manifold.markets/EliGaultney/will-the-us-government-shut-down-on" = ["YES", "NO"]
+
+[GROUPS."Pence Runs 2024"]
+"https://manifold.markets/NcyRocks/will-mike-pence-run-for-president-i" = ["YES", "NO"]
+"https://manifold.markets/BRTD/will-mike-pence-run-for-president-i-fba3872c8e95" = ["YES", "NO"]
+
+[GROUPS."N.C. Young misresolution"]
+"https://manifold.markets/NcyRocks/will-anyone-successfully-contest-on-8245fe15603f" = ["YES", "NO", "NO"]
+"https://manifold.markets/NcyRocks/will-anyone-successfully-contest-on-572e14fcecea" = ["YES", "YES", "NO"]
+
+[GROUPS."Abbot Runs 2024"]
+"https://manifold.markets/BTE/will-greg-abbott-seek-the-gop-nomin" = ["YES", "NO"]
+"https://manifold.markets/NcyRocks/will-greg-abbott-run-for-president" = ["YES", "NO"]
+
+[GROUPS."N.C. Young get married"]
+"https://manifold.markets/NcyRocks/will-i-get-married-by-2035" = ["YES", "NO", "NO"]
+"https://manifold.markets/NcyRocks/will-i-ever-get-married" = ["YES", "YES", "NO"]
+
+[GROUPS."Nation Pary New Zealand"] # ardern wins, national party wins, other
+"https://manifold.markets/Nostradamnedus/will-jacinda-ardern-be-the-prime-mi" = ["YES", "NO", "NO"]
+"https://manifold.markets/NcyRocks/will-the-national-party-form-a-gove" = ["NO", "YES", "NO"]
+
+[GROUPS."Bernie Runs"]
+"https://manifold.markets/LarsDoucet/will-bernie-sanders-seek-the-democr" = ["YES", "NO", "NO"]
+"https://manifold.markets/NcyRocks/will-bernie-sanders-run-for-preside" = ["YES", "YES", "NO"]
+
+[GROUPS."Moon Landing"] 
+"https://manifold.markets/AmmonLam/will-nasa-land-a-person-on-the-moon-97aac7e1ff3b" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/BoltonBailey/will-nasa-land-a-person-on-the-moon" = ["YES", "YES", "NO", "NO"]
+"https://manifold.markets/Treldman/will-there-be-a-new-human-moon-land" = ["YES", "YES", "YES", "NO"]

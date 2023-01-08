@@ -1,4 +1,5 @@
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, ThreadsX
+using Suppressor
 
 struct Group
     name::String
@@ -315,7 +316,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         betAmounts = optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
         # betAmounts = sols[groupNumber]
 
-        if time() - fetchTime > 20
+        if time() - fetchTime > 20 # caching so needs to be more than 15, or sleep until then
             markets = getMarkets(getSlugs(groups))
             fetchTime = time()
         end
@@ -518,3 +519,51 @@ function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=fal
         sleep(120 + 2*(rand()-.5) * 20) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
+
+# https://github.com/innerlee/PrintLog.jl
+"""
+    @printlog "file.log"
+Enable `printlog`.
+Outputs of `print` and `println` will be logged into file `file.log`.
+It will create the log file if it does not exist.
+All prints will be appended to the end of the file.
+    @printlog "file.log" silent
+Silent mode.
+Do not output `info`.
+"""
+macro printlog(file, silent=false)
+    file = "$(@__DIR__)/$file"
+    @eval begin
+        import Base.println, Base.print, Base.printstyled
+        @suppress Base.println(xs...) =
+            open(f -> (println(f, xs...); println(stdout, xs...)), $file, "a")
+        @suppress Base.print(xs...) =
+            open(f -> (print(f, xs...); print(stdout, xs...)), $file, "a")
+        @suppress Base.printstyled(xs...; kwargs...) =
+            open(f -> (printstyled(f, xs...; kwargs...); printstyled(stdout, xs..., ;  kwargs...)), $file, "a")
+    end
+    silent != :silent &&
+        @info("`print`, `println` and `printstyled` will be logged into file `$file`")
+    nothing
+end
+
+"""
+    @noprintlog
+Disable `printlog`.
+    @noprintlog silent
+Silent mode.
+"""
+macro noprintlog(silent=false)
+    @eval begin
+        import Base.println, Base.print, Base.printstyled
+        @suppress Base.println(xs...) = println(stdout, xs...)
+        @suppress Base.print(xs...) = print(stdout, xs...)
+        @suppress Base.printstyled(xs...; kwargs...) = printstyled(stdout, xs...; kwargs...)
+    end
+    silent != :silent &&
+        @info("`print`, `println` and `printstyled` are resumed.")
+    nothing
+end
+
+@printlog "log.txt"
+# prod()
