@@ -24,20 +24,23 @@ struct PlannedBet
     amount::Float64
     shares::Float64
     outcome::String
-    market::Market
+    id::String
+
+    question::String
+    url::String
 end
 
 function Base.show(io::IO, plannedBet::PlannedBet)
-    printstyled(io, "$(plannedBet.market.question)\n", color=:green)
+    printstyled(io, "$(plannedBet.question)\n", color=:green)
     print(io, "Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
 end
 
 function execute(bet, APIKEY)
-    response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
+    response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        println(bet.market.question)
-        println(bet.market.url)
+        println(bet.question)
+        println(bet.url)
         println(response)
         println(response.fills)
     end
@@ -130,7 +133,8 @@ function optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlu
 end
 
 function getMarkets(slugs)
-    markets = Dict{String, Market}()
+    markets = Dict()
+
     @sync for slug in slugs
         @async try
             markets[slug] = getMarketBySlug(slug)
@@ -145,8 +149,8 @@ function getMarkets(slugs)
 end
 
 function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
-    markets = Dict{String, Market}()
-    betsBySlug = Dict{String, Vector{Bet}}()
+    markets = Dict()
+    betsBySlug = Dict()
     # betsByMe = Dict{String, Vector{Bet}}()
     botBalance = 0.
 
@@ -363,7 +367,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             if isapprox(amount, 0., atol=1e-6)
                 continue
             elseif abs(amount) >= 1.
-                bet = PlannedBet(abs(amount), yesShares[j] + noShares[j], amount > 0. ? "YES" : "NO", markets[slug])
+                bet = PlannedBet(abs(amount), yesShares[j] + noShares[j], amount > 0. ? "YES" : "NO", markets[slug].id, markets[slug].question, markets[slug].url)
                 push!(plannedBets, bet)
             else
                 if !printedGroupName
@@ -435,7 +439,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
 
     if live
         for (plannedBet, executedBet) in executedBetPairs
-            updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(plannedBet.market.url), executedBet)
+            updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(plannedBet.url), executedBet)
         end
     end
 end
@@ -454,11 +458,11 @@ function run(groupNames = nothing; live=false, confirmBets=true, printDebug=true
     # markets = getMarkets(slugs)
     # processGroups!(GROUPS, markets)
 
-    betsByMe = Dict{String, Vector{Bet}}()
+    betsByMe = Dict()
 
     @sync for slug in getSlugs(GROUPS)
         @async try
-            betsByMe[slug] = getAllBets(slug=slug, username=USERNAME) # If we don't have the exact position arbitrage gets fucked, so we need all bets
+            betsByMe[slug] = getBets(slug=slug, username=USERNAME) # If we don't have the exact position arbitrage gets fucked, so we need all bets
         catch err
             bt = catch_backtrace()
             println()
@@ -477,7 +481,7 @@ end
 # run(live=true)
 # run(["Next Speaker of the House"])
 
-function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=false)
+function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false)
     data = TOML.parsefile("ArbBot/Arb.toml")
     GROUPS = data["GROUPS"]
     APIKEY = data["APIKEY"]
@@ -491,11 +495,11 @@ function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=fal
     # markets = getMarkets(slugs)
     # processGroups!(GROUPS, markets)
 
-    betsByMe = Dict{String, Vector{Bet}}()
+    betsByMe = Dict()
 
     @sync for slug in getSlugs(GROUPS)
         @async try
-            betsByMe[slug] = getAllBets(slug=slug, username=USERNAME) # If we don't have the exact position arbitrage gets fucked, so we need all bets
+            betsByMe[slug] = getBets(slug=slug, username=USERNAME) #getAllBets(slug=slug, username=USERNAME) # If we don't have the exact position arbitrage gets fucked, so we need all bets
         catch err
             bt = catch_backtrace()
             println()
@@ -516,7 +520,7 @@ function prod(groupNames = nothing; live=true, confirmBets=false, printDebug=fal
 
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
-        sleep(120 + 2*(rand()-.5) * 20) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+        sleep(15) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
 
@@ -565,5 +569,5 @@ macro noprintlog(silent=false)
     nothing
 end
 
-@printlog "log.txt"
+# @printlog "log.txt"
 # prod()
