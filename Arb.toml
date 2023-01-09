@@ -4,8 +4,8 @@ USERNAME = "Bot"
 [GROUPS."Isaac Trustworthiness"] # in Jan, not in Jan, none
 "https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO", "NO"]
 "https://manifold.markets/Courtney/isaacking-and-destiny-together-mani-42332c90e971" = ["YES", "NO", "NO"]
-"https://manifold.markets/jack/will-isaacking-lose-his-trustworthy-ec06dc536f2c" = ["YES", 0, "NO"]
-"https://manifold.markets/IsaacKing/will-i-lose-my-trustworthy-ish-badg" = ["YES", 0, "NO"]
+"https://manifold.markets/jack/will-isaacking-lose-his-trustworthy-ec06dc536f2c" = ["YES", "ZERO", "NO"]
+"https://manifold.markets/IsaacKing/will-i-lose-my-trustworthy-ish-badg" = ["YES", "ZERO", "NO"]
 
 [GROUPS."Monkeypox Jan 10"] # [84.3k, 84.5), [84.5, 84.8), 84800<=x<85k, [85k, 85.2), >=85.2k, none
 "https://manifold.markets/GeneFama/will-there-be-84300-confirmed-cases" = ["YES", "YES", "YES", "YES", "YES", "NO"]
@@ -97,7 +97,7 @@ USERNAME = "Bot"
 
 # "https://manifold.markets/jack/will-mccarthy-be-elected-next-speak" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
 
-# "https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = [0, "YES", 0, 0, 0, 0, 0, "NO"]
+# "https://manifold.markets/BTE/will-kevin-mccarthy-get-more-votes" = ["ZERO", "YES", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "NO"]
 
 # "https://manifold.markets/jack/will-jim-jordan-be-next-speaker-of" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
 
@@ -131,10 +131,10 @@ USERNAME = "Bot"
 [GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
 "https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
                                                                                   "NO", "NO", "NO",
-                                                                                  0, 0, 0]
-"https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", 0,
-                                                                       "YES", "NO", 0,
-                                                                       "YES", "NO", 0]
+                                                                                  "ZERO", "ZERO", "ZERO"]
+"https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", "ZERO",
+                                                                       "YES", "NO", "ZERO",
+                                                                       "YES", "NO", "ZERO"]
 "https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
                                                                       "YES", "NO", "YES",
                                                                       "YES", "YES", "NO"]
