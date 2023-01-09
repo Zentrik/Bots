@@ -303,7 +303,9 @@ end
 function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalance, live=false, confirmBets=true, printDebug=true)
     fetchTime = time()
 
+    printstyled("Fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     markets, betsBySlug, botBalance = getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
+    printstyled("Fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     
     processGroups!(GROUPS, markets)
 
@@ -320,6 +322,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
     # sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
     # sols = ThreadsX.map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
 
+    printstyled("Optimizing at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     @sync for (groupNumber, group) in enumerate(groups)
         plannedBets = PlannedBet[]
         
@@ -346,10 +349,6 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         oldProb = [markets[slug].probability::Float64 for slug in group.slugs]
         oldNoShares = [noSharesBySlug[slug] for slug in group.slugs]
         oldYesShares = [yesSharesBySlug[slug] for slug in group.slugs]
-
-        A = zeros(size(group.y_matrix)[1])
-        B = zeros(size(group.n_matrix)[1])
-        profitsByEvent = zeros(size(group.y_matrix)[1])
 
         newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
 
@@ -523,7 +522,9 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     # markets = getMarkets(slugs)
     # processGroups!(GROUPS, markets)
 
+    printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     noSharesBySlug, yesSharesBySlug = fetchMyShares(GROUPS, USERNAME)
+    printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     userBalance = Dict{String, Float64}()
 
@@ -536,8 +537,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
-        sleep(15)
-        # sleep(120 + 2*(rand()-.5) * 20) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+        # sleep(15)
+        sleep(120 + 2*(rand()-.5) * 20) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
 
