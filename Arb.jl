@@ -24,20 +24,23 @@ struct PlannedBet
     amount::Float64
     shares::Float64
     outcome::String
-    market::Market
+    marketId::String
+
+    question::String
+    url::String
 end
 
 function Base.show(io::IO, plannedBet::PlannedBet)
-    printstyled(io, "$(plannedBet.market.question)\n", color=:green)
+    printstyled(io, "$(plannedBet.question)\n", color=:green)
     print(io, "Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
 end
 
 function execute(bet, APIKEY)
-    response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
+    response = createBet(APIKEY, bet.marketId, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        println(bet.market.question)
-        println(bet.market.url)
+        println(bet.question)
+        println(bet.url)
         println(response)
         println(response.fills)
     end
@@ -150,7 +153,8 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
 end
 
 function getMarkets(slugs)
-    markets = Dict{String, Market}()
+    markets = Dict()
+
     @sync for slug in slugs
         @async try
             markets[slug] = getMarketBySlug(slug)
@@ -164,14 +168,27 @@ function getMarkets(slugs)
     return markets
 end
 
-function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
-    markets = Dict{String, Market}()
-    betsBySlug = Dict{String, Vector{Bet}}()
-    # betsByMe = Dict{String, Vector{Bet}}()
+
+
+function getMarketsAndBets(GROUPS, USERNAME)
+    # betsBySlug = Dict(slug => Dict{Symbol, Dict{Float64, Vector{LazyJSON.Object{Nothing, String}}}}() for slug in getSlugs(GROUPS))
+    bets = LazyJSON.Array(Nothing, "foo\"", 0);
+    betsBySlug = empty( Dict("slug" => (NO=Dict(.1 => LazyJSON.Object{Nothing, String}[]), YES=NO=Dict(.1 => LazyJSON.Object{Nothing, String}[]))) )
+    userIds = Set{String}()
+    userBalance = Dict{String, Float64}()
+    markets = empty(Dict("slug" => LazyJSON.Object(Nothing, "foo\"", 0)))
+
     botBalance::Float64 = 0.
 
     @sync begin 
-        # println(Dates.format(now(), "HH:MM:SS.sss"))
+        @async try
+            botBalance = convert(Float64, getUserByUsername(USERNAME)["balance"])
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+        end
+
         for group in values(GROUPS), url in keys(group)
             slug = urlToSlug(url)
 
@@ -184,39 +201,145 @@ function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
             end
 
             @async try
-                betsBySlug[slug] = getBets(slug=slug, limit=200)
+                # bets = JSON3.read(ManifoldMarkets.getHTTPRaw("https://manifold.markets/api/v0" * "/bets", ["limit" => 200, "contractSlug" => slug]).body)
+                betsBySlug[slug] = (NO=Dict(), YES=Dict())
+
+                for bet in bets
+                    if "limitProb" in keys(bet) && !bet["isCancelled"] && !bet["isFilled"]
+                        outcome = Symbol(bet["outcome"])
+
+                        limitProb = convert(Float64, bet["limitProb"])
+
+                        if limitProb ∉ keys(betsBySlug[slug][outcome])
+                            betsBySlug[slug][outcome][limitProb] = [bet]
+                        else
+                            push!(betsBySlug[slug][outcome][limitProb], bet)
+                        end
+
+                        userId = convert(String, bet["userId"])
+                        if userId ∉ userIds
+                            push!(userIds, userId)
+                            @async try
+                                userBalance[userId] = getUserById(userId)["balance"]
+                            catch err
+                                bt = catch_backtrace()
+                                println()
+                                showerror(stderr, err, bt)
+                            end
+                        end
+                    end
+                end
+            
+                for outcome in (:NO, :YES), limitProb in keys(betsBySlug[slug][outcome])
+                    sort!(betsBySlug[slug][outcome][limitProb]; by=bet->bet["createdTime"])
+                end
             catch err
                 bt = catch_backtrace()
                 println()
                 showerror(stderr, err, bt)
             end
-            # betsBySlug[slug] = []
-        end
-
-        # println(Dates.format(now(), "HH:MM:SS.sss"))
-        for userId in keys(oldUserBalance)  # we need to drop users after not needed for a while
-            @async try
-                oldUserBalance[userId] = getUserById(userId).balance
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-            end
-        end 
-        # println(Dates.format(now(), "HH:MM:SS.sss"))
-
-        @async try
-            botBalance = Float64(getUserByUsername(USERNAME).balance)
-        catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
         end
     end
-    # println(Dates.format(now(), "HH:MM:SS.sss"))
 
-    return (markets=markets, betsBySlug=betsBySlug, botBalance=botBalance)
+    return markets, betsBySlug, userIds, userBalance, botBalance
 end
+
+
+function testDownloads(GROUPS, USERNAME)
+    # betsBySlug = Dict(slug => Dict{Symbol, Dict{Float64, Vector{LazyJSON.Object{Nothing, String}}}}() for slug in getSlugs(GROUPS))
+    bets = 0;
+    betsBySlug = empty( Dict("slug" => Dict(:NO => Dict(.1 => LazyJSON.Object{Nothing, String}[]))) )
+
+    @sync begin 
+        for group in values(GROUPS), url in keys(group)
+            slug = urlToSlug(url)
+
+            @async try
+                headers, bets = request_body("https://manifold.markets/api/v0/bets?limit=200" * "&contractSlug=$slug")
+                # bets = getBets(limit=200, slug=slug)
+                # sortLimitOrders!(betsBySlug[slug], userIds, bets)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+            end
+        end
+    end
+
+    return bets
+end
+
+function testRaw(GROUPS, USERNAME)
+    # betsBySlug = Dict(slug => Dict{Symbol, Dict{Float64, Vector{LazyJSON.Object{Nothing, String}}}}() for slug in getSlugs(GROUPS))
+    bets = 0;
+    betsBySlug = empty( Dict("slug" => Dict(:NO => Dict(.1 => LazyJSON.Object{Nothing, String}[]))) )
+
+    @sync begin 
+        for group in values(GROUPS), url in keys(group)
+            slug = urlToSlug(url)
+
+            @async try
+                bets = ManifoldMarkets.getHTTPRaw("https://manifold.markets/api/v0" * "/bets", ["limit" => 200, "contractSlug" => slug]).body
+                # bets = getBets(limit=200, slug=slug)
+                # sortLimitOrders!(betsBySlug[slug], userIds, bets)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+            end
+        end
+    end
+
+    return bets
+end
+
+function testJSON3(GROUPS, USERNAME)
+    # betsBySlug = Dict(slug => Dict{Symbol, Dict{Float64, Vector{LazyJSON.Object{Nothing, String}}}}() for slug in getSlugs(GROUPS))
+    bets = 0;
+    betsBySlug = empty( Dict("slug" => Dict(:NO => Dict(.1 => LazyJSON.Object{Nothing, String}[]))) )
+
+    @sync begin 
+        for group in values(GROUPS), url in keys(group)
+            slug = urlToSlug(url)
+
+            @async try
+                # bets = JSON3.read(ManifoldMarkets.getHTTPRaw("https://manifold.markets/api/v0" * "/bets", ["limit" => 200, "contractSlug" => slug]).body)
+                bets = getBets(limit=200, slug=slug)
+                # sortLimitOrders!(betsBySlug[slug], userIds, bets)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+            end
+        end
+    end
+
+    return bets
+end
+
+function testLazy(GROUPS, USERNAME)
+    # betsBySlug = Dict(slug => Dict{Symbol, Dict{Float64, Vector{LazyJSON.Object{Nothing, String}}}}() for slug in getSlugs(GROUPS))
+    bets = 0;
+    betsBySlug = empty( Dict("slug" => Dict(:NO => Dict(.1 => LazyJSON.Object{Nothing, String}[]))) )
+
+    @sync begin 
+        for group in values(GROUPS), url in keys(group)
+            slug = urlToSlug(url)
+
+            @async try
+                bets = LazyJSON.parse(ManifoldMarkets.getHTTPRaw("https://manifold.markets/api/v0" * "/bets", ["limit" => 200, "contractSlug" => slug]).body)
+                # sortLimitOrders!(betsBySlug[slug], userIds, bets)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+            end
+        end
+    end
+
+    return bets
+end
+
 
 function getSlugs(GROUPS::Dict)
     return mapreduce(x -> urlToSlug.(x), vcat, keys.(values(GROUPS)))
@@ -229,7 +352,7 @@ function getSlugs(groups::Vector{Group})
     return mapreduce(group -> group.slugs, vcat, groups)
 end
 
-isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
+isMarketClosingSoon(market) = market["isResolved"] || market["closeTime"] / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
 function processGroups!(GROUPS, markets)
     # Remove any group with no open markets
@@ -261,14 +384,14 @@ function getLimits!(userBalance, groups, betsBySlug)
     sortedLimitProbs = Dict{String, NamedTuple{(:NO, :YES), Tuple{Vector{Float64}, Vector{Float64}}}}()
 
     for group in groups, slug in group.slugs
-        tmp, userIdsSlug = sortLimitOrders!(userBalance, betsBySlug[slug])
+        tmp, userIdsSlug = sortLimitOrders!(betsBySlug[slug])
         union!(userIds, userIdsSlug)
         limitOrdersByProb[slug] = tmp
     end
 
     @sync for userId in userIds
         if userId ∉ Set(keys(userBalance))
-            @async userBalance[userId] = getUserById(userId).balance
+            @async userBalance[userId] = getUserById(userId)["balance"]
         end
     end
     
@@ -487,8 +610,8 @@ end
 function readData()
     data = TOML.parsefile("ArbBot/Arb.toml")
     GROUPS::Dict{String, Dict{String, Vector{String}}} = data["GROUPS"]
-    APIKEY = data["APIKEY"]
-    USERNAME = data["USERNAME"]
+    APIKEY::String = data["APIKEY"]
+    USERNAME::String = data["USERNAME"]
 
     return GROUPS, APIKEY, USERNAME
 end
@@ -542,6 +665,26 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     end
 end
 
+function testFetching()
+    GROUPS, APIKEY, USERNAME = readData()  
+
+    # GROUPS = Dict("Tesla CEO" => GROUPS["Tesla CEO"])
+
+    @time markets, betsBySlug, userIds, userBalance, botBalance = getMarketsAndBets(GROUPS, USERNAME);
+end
+
+function testLimits()
+    GROUPS, APIKEY, USERNAME = readData()  
+    oldUserBalance = Dict{String, Float64}()
+    @time markets, betsBySlug, botBalance = getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME);
+
+    processGroups!(GROUPS, markets)
+
+    groups = Group.(keys(GROUPS), values(GROUPS))
+
+    @time limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, groups, betsBySlug);
+end
+    
 # https://github.com/innerlee/PrintLog.jl
 """
     @printlog "file.log"
