@@ -183,26 +183,26 @@ function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
                 showerror(stderr, err, bt)
             end
 
-            @async try
-                betsBySlug[slug] = getBets(slug=slug, limit=200)
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-            end
-            # betsBySlug[slug] = []
+            # @async try
+            #     betsBySlug[slug] = getBets(slug=slug, limit=200)
+            # catch err
+            #     bt = catch_backtrace()
+            #     println()
+            #     showerror(stderr, err, bt)
+            # end
+            betsBySlug[slug] = []
         end
 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
-        for userId in keys(oldUserBalance)  # we need to drop users after not needed for a while
-            @async try
-                oldUserBalance[userId] = getUserById(userId).balance
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-            end
-        end 
+        # for userId in keys(oldUserBalance)  # we need to drop users after not needed for a while
+        #     @async try
+        #         oldUserBalance[userId] = getUserById(userId).balance
+        #     catch err
+        #         bt = catch_backtrace()
+        #         println()
+        #         showerror(stderr, err, bt)
+        #     end
+        # end 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
 
         @async try
@@ -305,7 +305,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
 
     printstyled("Fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     markets, betsBySlug, botBalance = getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
-    printstyled("Fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
+    printstyled("Done fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     
     processGroups!(GROUPS, markets)
 
@@ -355,6 +355,8 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
 
         profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
+        newYesShares = yesShares .- oldYesShares
+        newNoShares = noShares  .- oldNoShares
 
         if printDebug
             printstyled("=== $(group.name) ===\n", color=:bold)
@@ -392,7 +394,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             if isapprox(amount, 0., atol=1e-6)
                 continue
             elseif abs(amount) >= 1.
-                bet = PlannedBet(abs(amount), yesShares[j] + noShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
+                bet = PlannedBet(abs(amount), newYesShares[j] + newNoShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
                 push!(plannedBets, bet)
             else
                 if !printedGroupName
@@ -410,7 +412,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             end
 
             printstyled("$slug\n", color=:red)
-            println("Prior probs:     $(oldProb[j]*100)%")
+            println("Prior probs:     $(markets[slug].probability * 100)%")
             println("Posterior probs: $(newProb[j]*100)%")
         end
 
@@ -485,7 +487,7 @@ function fetchMyShares(GROUPS, USERNAME)
 end
 
 function readData()
-    data = TOML.parsefile("ArbBot/Arb.toml")
+    data = TOML.parsefile("$(@__DIR__)/Arb.toml")
     GROUPS::Dict{String, Dict{String, Vector{String}}} = data["GROUPS"]
     APIKEY = data["APIKEY"]
     USERNAME = data["USERNAME"]
