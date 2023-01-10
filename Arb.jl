@@ -499,7 +499,7 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     GROUPS, APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
-        GROUPS = Dict(name => data["GROUPS"][name] for name in groupNames)
+        GROUPS = Dict(name => GROUPS[name] for name in groupNames)
     end
     
     # slugs = getSlugs(GROUPS)
@@ -517,7 +517,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     GROUPS, APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
-        GROUPS = Dict(name => data["GROUPS"][name] for name in groupNames)
+        GROUPS = Dict(name => GROUPS[name] for name in groupNames)
     end
     
     # slugs = getSlugs(GROUPS)
