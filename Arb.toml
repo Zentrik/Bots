@@ -128,19 +128,30 @@ USERNAME = "Bot"
 # "https://manifold.markets/jack/will-the-next-speaker-of-the-house-038cdc36cc58" = ["YES", "YES", "YES", "NO", "NO"]
 # "https://manifold.markets/MichaelBlume/will-the-next-speaker-of-the-house-cebea93804f7" = ["YES", "YES", "YES", "YES", "NO"]
  
-[GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
-"https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
-                                                                                  "NO", "NO", "NO",
-                                                                                  "ZERO", "ZERO", "ZERO"]
-"https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", "ZERO",
-                                                                       "YES", "NO", "ZERO",
-                                                                       "YES", "NO", "ZERO"]
-"https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
-                                                                      "YES", "NO", "YES",
-                                                                      "YES", "YES", "NO"]
-"https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "YES",
-                                                                      "NO", "NO", "YES",
-                                                                      "NO", "NO", "YES"]
+# [GROUPS."Fun Market"] # YES, NO, none (if PROB payout >= 0)
+# "https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "YES", "YES",
+#                                                                                   "NO", "NO", "NO",
+#                                                                                   "ZERO", "ZERO", "ZERO"]
+# "https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", "ZERO",
+#                                                                        "YES", "NO", "ZERO",
+#                                                                        "YES", "NO", "ZERO"]
+# "https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "YES", "YES",
+#                                                                       "YES", "NO", "YES",
+#                                                                       "YES", "YES", "NO"]
+# "https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "YES",
+#                                                                       "NO", "NO", "YES",
+#                                                                       "NO", "NO", "YES"]
+# "https://manifold.markets/JonathanRay/will-the-linked-21-70-interval-mark" = ["YES", "NO", "ZERO",
+#                                                                               "YES", "NO", "ZERO",
+#                                                                               "YES", "NO", "ZERO"]
+
+[GROUPS."Fun Market"] # YES, NO < 21, NO > 70, none (if PROB payout >= 0)
+"https://manifold.markets/levifinkelstein/will-this-market-be-in-the-interval" = ["YES", "NO", "NO", "ZERO"]
+"https://manifold.markets/Fion/will-the-linked-market-by-levi-fink" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/Bot/will-the-two-linked-markets-resolve" = ["NO", "NO", "NO", "YES"]
+"https://manifold.markets/Bot/will-the-linked-market-resolve-na-o" = ["NO", "NO", "NO", "YES"]
+"https://manifold.markets/JonathanRay/will-the-linked-21-70-interval-mark" = ["NO", "NO", "YES", "NO"]
+"https://manifold.markets/rockenots/will-the-linked-21-70-market-close" = ["NO", "YES", "NO", "NO"]
 
 [GROUPS."Nuclear Weapons Detonation 2023"]
 "https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-b71e74f6a8e4" = ["YES", "NO"]
