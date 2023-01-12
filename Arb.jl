@@ -164,17 +164,14 @@ function getMarkets(slugs)
     return markets
 end
 
-function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
+function getMarketsAndBets!(oldUserBalance, group)
     markets = Dict{String, Market}()
     betsBySlug = Dict{String, Vector{Bet}}()
     # betsByMe = Dict{String, Vector{Bet}}()
-    botBalance::Float64 = 0.
 
     @sync begin 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
-        for group in values(GROUPS), url in keys(group)
-            slug = urlToSlug(url)
-
+        for slug in group.slugs
             @async try
                 markets[slug] = getMarketBySlug(slug)
             catch err
@@ -204,18 +201,10 @@ function getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
         #     end
         # end 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
-
-        @async try
-            botBalance = Float64(getUserByUsername(USERNAME).balance)
-        catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
-        end
     end
     # println(Dates.format(now(), "HH:MM:SS.sss"))
 
-    return (markets=markets, betsBySlug=betsBySlug, botBalance=botBalance)
+    return (markets=markets, betsBySlug=betsBySlug)
 end
 
 function getSlugs(GROUPS::Dict)
@@ -231,36 +220,31 @@ end
 
 isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
-function processGroups!(GROUPS, markets)
-    # Remove any group with no open markets
+function processGroups!(GROUPS, group, markets)
+    # Remove the group if it has no open markets
 
-    for (name, group) in GROUPS
-        allClosed = true
+    allMarketsClosed = true
 
-        for url in keys(group)
-            slug = urlToSlug(url)
-
-            market = markets[slug]
-            if !isMarketClosingSoon(market)
-                allClosed = false
-            end
+    for slug in group.slugs
+        if !isMarketClosingSoon(markets[slug])
+            allMarketsClosed = false
         end
+    end
 
-        if allClosed
-            printstyled("\nDeleted group $name\n", bold=true, blink=true, underline=true)
-            pop!(GROUPS, name)
-        end
+    if allMarketsClosed
+        printstyled("\nDeleted group $(group.name)\n", bold=true, underline=true)
+        pop!(GROUPS, group.name)
     end
 end
 
-function getLimits!(userBalance, groups, betsBySlug)
+function getLimits!(userBalance, group, betsBySlug)
     limitOrdersBySlug = Dict{String, Dict{Symbol, Dict{Float64, Vector{Float64}}}}()
     limitOrdersByProb = Dict()
     splitBets = Dict()
     userIds = Set()
     sortedLimitProbs = Dict{String, NamedTuple{(:NO, :YES), Tuple{Vector{Float64}, Vector{Float64}}}}()
 
-    for group in groups, slug in group.slugs
+    for slug in group.slugs
         tmp, userIdsSlug = sortLimitOrders!(userBalance, betsBySlug[slug])
         union!(userIds, userIdsSlug)
         limitOrdersByProb[slug] = tmp
@@ -272,7 +256,7 @@ function getLimits!(userBalance, groups, betsBySlug)
         end
     end
     
-    for group in groups, slug in group.slugs
+    for slug in group.slugs
         limitOrdersBySlug[slug], splitBets[slug] = getLimitOrders(limitOrdersByProb[slug], userBalance)
 
         sortedLimitProbs[slug] = (NO=limitOrdersBySlug[slug][:NO] |> keys |> collect |> x -> sort(x, rev=true), YES=limitOrdersBySlug[slug][:YES] |> keys |> collect |> x -> sort(x))
@@ -301,38 +285,23 @@ end
 
 
 function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalance, live=false, confirmBets=true, printDebug=true)
-    fetchTime = time()
-
-    printstyled("Fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    markets, betsBySlug, botBalance = getMarketsAndBets!(oldUserBalance, GROUPS, USERNAME)
-    printstyled("Done fetching markets at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
+    botBalance = getUserByUsername(USERNAME).balance
     
-    processGroups!(GROUPS, markets)
-
     groups = Group.(keys(GROUPS), values(GROUPS))
 
-    limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, groups, betsBySlug)
-
-    # totalNumberOfMarkets = mapreduce(group -> group.noMarkets, +, groups)
     maxNumberOfMarkets = mapreduce(group -> group.noMarkets, max, groups)
     maxBetAmount = botBalance / (3 + 1.5*maxNumberOfMarkets)
 
-    # noSharesBySlug, yesSharesBySlug = calculateShares(groups, betsByMe)
+    @sync for group in groups
+        fetchTime = time()
 
-    # sols = map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
-    # sols = ThreadsX.map(group -> optimise(group, markets, limitOrdersBySlug, maxBetAmount, noSharesBySlug, yesSharesBySlug, [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]), groups)
+        markets, betsBySlug = getMarketsAndBets!(oldUserBalance, group)
 
-    printstyled("Optimizing at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    @sync for (groupNumber, group) in enumerate(groups)
+        processGroups!(GROUPS, group, markets)
+
+        limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, group, betsBySlug)
+
         plannedBets = PlannedBet[]
-        
-        # for market in markets:
-        #     skip = skip_market(market)
-        #     if skip:
-        #         print()
-        #         print(skip)
-        #         print("Skipping group.\n")
-        #         return
 
         printedGroupName = false
 
@@ -359,7 +328,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         newNoShares = noShares  .- oldNoShares
 
         if printDebug
-            printstyled("=== $(group.name) ===\n", color=:bold) # hyperlink
+            printstyled("=== $(group.name) ===\n", color=:bold)
             printedGroupName = true
 
             println(bettableSlugsIndex)
