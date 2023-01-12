@@ -28,7 +28,7 @@ struct PlannedBet
 end
 
 function Base.show(io::IO, plannedBet::PlannedBet)
-    printstyled(io, "$(plannedBet.market.question)\n", color=:green)
+    printstyled(io, "\e]8;;$(plannedBet.market.url)\e\\$(plannedBet.market.question)\e]8;;\e\\\n", color=:green) # hyperlink
     print(io, "Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
 end
 
@@ -36,7 +36,7 @@ function execute(bet, APIKEY)
     response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        println(bet.market.question)
+        printstyled("\e]8;;$(bet.market.url)\e\\$(bet.market.question)\e]8;;\e\\\n", color=:green) # hyperlink
         println(bet.market.url)
         println(response)
         println(response.fills)
@@ -127,7 +127,7 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=10.)
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex, newProb).profitsByEvent |> minimum
@@ -359,7 +359,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         newNoShares = noShares  .- oldNoShares
 
         if printDebug
-            printstyled("=== $(group.name) ===\n", color=:bold)
+            printstyled("=== $(group.name) ===\n", color=:bold) # hyperlink
             printedGroupName = true
 
             println(bettableSlugsIndex)
@@ -411,7 +411,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
                 printedGroupName = true
             end
 
-            printstyled("$slug\n", color=:red)
+            printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
             println("Prior probs:     $(markets[slug].probability * 100)%")
             println("Posterior probs: $(newProb[j]*100)%")
         end
@@ -492,6 +492,20 @@ function readData()
     APIKEY = data["APIKEY"]
     USERNAME = data["USERNAME"]
 
+    slugs = getSlugs(GROUPS)
+    if !allunique(slugs)
+        println("Duplicate slug detected")
+
+        sort!(slugs)
+        for i in 1:length(slugs)-1
+            if slugs[i] == slugs[i+1]
+                println(slugs[i])
+            end
+        end
+
+        error()
+    end
+
     return GROUPS, APIKEY, USERNAME
 end
 
@@ -506,11 +520,15 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     # markets = getMarkets(slugs)
     # processGroups!(GROUPS, markets)
 
+    printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     noSharesBySlug, yesSharesBySlug = fetchMyShares(GROUPS, USERNAME)
+    printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     userBalance = Dict{String, Float64}()
 
+    printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
     arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+    printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false)
