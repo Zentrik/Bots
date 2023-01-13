@@ -383,6 +383,7 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
             println("Prior probs:     $(markets[slug].probability * 100)%")
             println("Posterior probs: $(newProb[j]*100)%")
+            printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount)\n", color=:green)
         end
 
         if skipMarket
@@ -408,9 +409,9 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         end
         printstyled("Profits:         $profit\n", color=:yellow)
 
-        for bet in plannedBets
-            println(bet)
-        end
+        # for bet in plannedBets
+        #     println(bet)
+        # end
 
         if confirmBets
             println("Proceed? (y/n)") 
