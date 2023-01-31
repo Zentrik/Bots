@@ -32,6 +32,7 @@ function Base.show(io::IO, plannedBet::PlannedBet)
 end
 
 function execute(bet, APIKEY)
+    ohno = false
     response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
@@ -39,9 +40,11 @@ function execute(bet, APIKEY)
         println(bet.market.url)
         println(response)
         println(response.fills)
+
+        ohno = true
     end
 
-    return response
+    return response, ohno
 end
 
 function updateShares!(noSharesBySlug, yesSharesBySlug, slug, newBet)
@@ -163,10 +166,11 @@ function getMarkets(slugs)
     return markets
 end
 
-function getMarketsAndBets!(oldUserBalance, group)
+function getMarketsAndBets!(oldUserBalance, group, USERNAME)
     markets = Dict{String, Market}()
     betsBySlug = Dict{String, Vector{Bet}}()
     # betsByMe = Dict{String, Vector{Bet}}()
+    myBalance = 0.
 
     @sync begin 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
@@ -201,10 +205,12 @@ function getMarketsAndBets!(oldUserBalance, group)
         #     end
         # end 
         # println(Dates.format(now(), "HH:MM:SS.sss"))
+
+        myBalance = getUserByUsername(USERNAME).balance
     end
     # println(Dates.format(now(), "HH:MM:SS.sss"))
 
-    return (markets=markets, betsBySlug=betsBySlug)
+    return (markets=markets, betsBySlug=betsBySlug, myBalance=myBalance)
 end
 
 function getSlugs(GROUPS::Dict)
@@ -220,24 +226,25 @@ end
 
 isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
-function processGroups!(GROUPS, group, markets)
-    # Remove the group if it has no open markets
+# function processGroups!(groups, group, markets)
+#     # Remove the group if it has no open markets
 
-    allMarketsClosed = true
+#     allMarketsClosed = true
 
-    for slug in group.slugs
-        if !isMarketClosingSoon(markets[slug])
-            allMarketsClosed = false
-        end
-    end
+#     for slug in group.slugs
+#         if !isMarketClosingSoon(markets[slug])
+#             allMarketsClosed = false
+#         end
+#     end
 
-    if allMarketsClosed
-        printstyled("\nDeleted group $(group.name)\n", bold=true, underline=true)
-        pop!(GROUPS, group.name)
-    end
+#     if allMarketsClosed
+#         printstyled("\nDeleted group $(group.name)\n", bold=true, underline=true)
+#         deleteat!(groups, findall(x->x==group, groups))
+#         # pop!(groups, group)
+#     end
 
-    return allMarketsClosed
-end
+#     return allMarketsClosed
+# end
 
 function getLimits!(userBalance, group, betsBySlug)
     limitOrdersBySlug = Dict{String, Dict{Symbol, Dict{Float64, Vector{Float64}}}}()
@@ -291,180 +298,233 @@ function calculateMyShares(slugs, betsByMe)
     return (noShares=noShares, yesShares=yesShares, amountInvested=amountInvested)
 end
 
+# Returns all bets since lastBetId exclusive.
+function getLiveBets(lastBetId)
+    gotAllBets = false
+    Bets = Bet[]
 
-function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalance, live=false, confirmBets=true, printDebug=true)
-    botBalance = getUserByUsername(USERNAME).balance
-    
-    groups = Group.(keys(GROUPS), values(GROUPS))
+    numberOfBetsFetched = 0
 
-    # maxNumberOfMarkets = mapreduce(group -> group.noMarkets, max, groups)
+    lastBetFetched = nothing
 
-    @sync for group in groups
-        maxBetAmount = botBalance / (3 + 1.5*group.noMarkets)
+    while !gotAllBets && numberOfBetsFetched <= 100
+        tmp = getBets(limit=5, before=lastBetFetched)
 
-        fetchTime = time()
-
-        markets, betsBySlug = getMarketsAndBets!(oldUserBalance, group)
-
-        if processGroups!(GROUPS, group, markets) # if all markets in this group are closed.
-            continue
-        end
-
-        limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, group, betsBySlug)
-
-        plannedBets = PlannedBet[]
-
-        printedGroupName = false
-
-        bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
-
-        betAmounts = optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
-        # betAmounts = sols[groupNumber]
-
-        if time() - fetchTime > 10 # caching so needs to be more than 15, or sleep until then
-            @sync for slug in group.slugs
-                @async try
-                    markets[slug] = getMarketBySlug(slug)
-                catch err
-                    bt = catch_backtrace()
-                    println()
-                    showerror(stderr, err, bt)
-                end
-            end
-
-            fetchTime = time()
-        end
-
-        oldProb = [markets[slug].probability::Float64 for slug in group.slugs]
-        oldNoShares = [noSharesBySlug[slug] for slug in group.slugs]
-        oldYesShares = [yesSharesBySlug[slug] for slug in group.slugs]
-
-        newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
-
-        oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
-
-        profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
-        newYesShares = yesShares .- oldYesShares
-        newNoShares = noShares  .- oldNoShares
-
-        if printDebug
-            printstyled("=== $(group.name) ===\n", color=:bold)
-            printedGroupName = true
-
-            println(bettableSlugsIndex)
-            println()
-            println(oldProb)
-            println(newProb)
-            println()
-            println(oldProfitsByEvent)
-            println(newProfitsByEvent)
-            println(profit)
-            println()
-            println(betAmounts)
-            println()
-            println(group.y_matrix)
-            println(group.n_matrix)
-            println()
-            println(getindex.(Ref(yesSharesBySlug), group.slugs))
-            println(getindex.(Ref(noSharesBySlug), group.slugs))
-            println(yesShares)
-            println(noShares)
-            println(group.y_matrix * yesShares)
-            println(group.n_matrix * noShares)
-            println(sum(abs.(betAmounts)))
-            println()
-        end
-
-        if profit <= .01 * length(plannedBets)
-            # if !isempty(plannedBets)
-            #     if !printedGroupName
-            #         printstyled("=== $(group.name) ===\n", color=:bold)
-            #         printedGroupName = true
-            #     end
-
-            #     println("Insufficient profit $(profit) for $(length(plannedBets)) bets")
-            # end
-            continue
-        end
-
-        skipMarket = false
-        for (i, j) in enumerate(bettableSlugsIndex)
-            amount = betAmounts[i]
-            slug = group.slugs[j]
-
-            if isapprox(amount, 0., atol=1e-6)
-                continue
-            elseif abs(amount) >= 1.
-                bet = PlannedBet(abs(amount), newYesShares[j] + newNoShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
-                push!(plannedBets, bet)
-            else
-                if !printedGroupName
-                    printstyled("=== $(group.name) ===\n", color=:bold)
-                    printedGroupName = true
-                end
-                println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
-                skipMarket = true
+        for (i, bet) in enumerate(tmp) # probably faster to go in reverse
+            if bet.id == lastBetId
+                gotAllBets = true
+                append!(Bets, tmp[1:i-1])
                 break
             end
+        end
 
+        numberOfBetsFetched += 10
+        lastBetFetched = tmp[end].id
+
+        if !gotAllBets
+            append!(Bets, tmp)
+        end
+    end
+
+    return Bets
+end
+
+function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalance, live=false, confirmBets=true, printDebug=true)
+    fetchTime = time()
+
+    markets, betsBySlug, botBalance = getMarketsAndBets!(oldUserBalance, group, USERNAME)
+
+    maxBetAmount = botBalance / (3 + 1.5*group.noMarkets)
+
+    # Won't get called as arbitrageGroup only gets called if a market has a bet made on it
+    # if processGroups!(groups, group, markets) # if all markets in this group are closed.
+    #     return
+    # end
+
+    # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
+    for slug in group.slugs
+        if isMarketClosingSoon(markets[slug])
+            return false
+        end
+    end
+
+    limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, group, betsBySlug)
+
+    plannedBets = PlannedBet[]
+
+    printedGroupName = false
+
+    bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
+
+    betAmounts = optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
+    # betAmounts = sols[groupNumber]
+
+    if time() - fetchTime > 10 # caching so needs to be more than 15, or sleep until then
+        @sync for slug in group.slugs
+            @async try
+                markets[slug] = getMarketBySlug(slug)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+            end
+        end
+
+        fetchTime = time()
+    end
+
+    oldProb = [markets[slug].probability::Float64 for slug in group.slugs]
+    oldNoShares = [noSharesBySlug[slug] for slug in group.slugs]
+    oldYesShares = [yesSharesBySlug[slug] for slug in group.slugs]
+
+    newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
+
+    oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
+
+    profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
+    newYesShares = yesShares .- oldYesShares
+    newNoShares = noShares  .- oldNoShares
+
+    if printDebug
+        printstyled("=== $(group.name) ===\n", color=:bold)
+        printedGroupName = true
+
+        println(bettableSlugsIndex)
+        println()
+        println(oldProb)
+        println(newProb)
+        println()
+        println(oldProfitsByEvent)
+        println(newProfitsByEvent)
+        println(profit)
+        println()
+        println(betAmounts)
+        println()
+        println(group.y_matrix)
+        println(group.n_matrix)
+        println()
+        println(getindex.(Ref(yesSharesBySlug), group.slugs))
+        println(getindex.(Ref(noSharesBySlug), group.slugs))
+        println(yesShares)
+        println(noShares)
+        println(group.y_matrix * yesShares)
+        println(group.n_matrix * noShares)
+        println(sum(abs.(betAmounts)))
+        println()
+    end
+
+    if profit <= .01 * length(plannedBets)
+        return false
+    end
+
+    bindingConstraint = false # whether we would bet more if the maxBetAmount was larger
+    for (i, j) in enumerate(bettableSlugsIndex)
+        amount = betAmounts[i]
+        slug = group.slugs[j]
+
+        if isapprox(amount, 0., atol=1e-6)
+            continue
+        elseif abs(amount) >= 1.
+            bet = PlannedBet(abs(amount), newYesShares[j] + newNoShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
+            push!(plannedBets, bet)
+            
+            if abs(amount) >= .95 * maxBetAmount
+                println("Bet size is $(100 * amount/maxBetAmount)% of maxBetAmount")
+                bindingConstraint = true
+            end
+
+            if amount ≈ 1
+                bindingConstraint = true
+            end
+        else
             if !printedGroupName
                 printstyled("=== $(group.name) ===\n", color=:bold)
                 printedGroupName = true
             end
-
-            printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
-            println("Prior probs:     $(markets[slug].probability * 100)%")
-            println("Posterior probs: $(newProb[j]*100)%")
-            printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount)\n", color=:green)
-        end
-
-        if skipMarket
-            continue
-        end
-
-        if sum(abs.(betAmounts)) >= botBalance - 100
-            println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet")
-            continue
+            println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
+            return false
+            break
         end
 
         if !printedGroupName
             printstyled("=== $(group.name) ===\n", color=:bold)
             printedGroupName = true
         end
-        printstyled("Profits:         $profit\n", color=:yellow)
 
-        # for bet in plannedBets
-        #     println(bet)
-        # end
+        printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
+        println("Prior probs:     $(markets[slug].probability * 100)%")
+        println("Posterior probs: $(newProb[j]*100)%")
+        printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount)\n", color=:green)
+    end
 
-        if confirmBets
-            println("Proceed? (y/n)") 
-            if readline() !="y"
-                continue
-            end
+    if sum(abs.(betAmounts)) >= botBalance - 100
+        println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet")
+        return false
+    end
+
+    if !printedGroupName
+        printstyled("=== $(group.name) ===\n", color=:bold)
+        printedGroupName = true
+    end
+    printstyled("Profits:         $profit\n", color=:yellow)
+
+    if confirmBets
+        println("Proceed? (y/n)") 
+        if readline() !="y"
+            return false
         end
+    end
 
-        if live
-            for bet in plannedBets 
-                @async try
-                    executedBet = execute(bet, APIKEY)
-                    botBalance -= executedBet.amount
-                    updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(bet.market.url), executedBet)
-                catch err
-                    bt = catch_backtrace()
-                    println()
-                    showerror(stderr, err, bt)
-                    throw(err)
+    rerun = bindingConstraint
+
+    if live
+        @sync for bet in plannedBets 
+            @async try
+                executedBet, ohno = execute(bet, APIKEY)
+
+                if ohno
+                    rerun = true
                 end
-            # print(f"Balance: {my_balance()}\n")
+
+                botBalance -= executedBet.amount
+                updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(bet.market.url), executedBet)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+                throw(err)
             end
         end
     end
+
+    return rerun * live
 end
 
-# run()
-# run(live=true)
-# run(["Next Speaker of the House"])
+function arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalances, lastBetId, contractIdSet, contractIdToGroupIndex, live=false, confirmBets=true, printDebug=true)
+    bets = getLiveBets(lastBetId)
+    println(length(bets)+1)
+
+    seenGroups = Set{Int}()
+
+    for bet in bets
+        if bet.contractId in contractIdSet && contractIdToGroupIndex[bet.contractId] ∉ seenGroups && bet.userUsername != USERNAME && bet.limitProb === nothing
+            rerun = true
+            # runs = 0
+            
+            while rerun# && runs <= 5
+                println("Running $(groups[contractIdToGroupIndex[bet.contractId]].name)")
+                rerun = arbitrageGroup(groups[contractIdToGroupIndex[bet.contractId]], APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalances, live, confirmBets, printDebug)
+            end
+            push!(seenGroups, contractIdToGroupIndex[bet.contractId])
+        end
+    end
+
+    if length(bets) == 0
+        return lastBetId
+    else
+        return bets[1].id
+    end
+end
 
 function fetchMyShares(GROUPS, USERNAME)
     betsByMe = Dict{String, Vector{Bet}}()
@@ -506,25 +566,70 @@ function readData()
     return GROUPS, APIKEY, USERNAME
 end
 
-function test(groupNames = nothing; live=false, confirmBets=true, printDebug=true)
-    GROUPS, APIKEY, USERNAME = readData()  
+function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
+    GROUPS, APIKEY, USERNAME = readData()
 
-    if groupNames !== nothing
-        GROUPS = Dict(name => GROUPS[name] for name in groupNames)
-    end
+    groups = Group.(keys(GROUPS), values(GROUPS))
     
     # slugs = getSlugs(GROUPS)
     # markets = getMarkets(slugs)
     # processGroups!(GROUPS, markets)
 
     printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
+    noSharesBySlug, yesSharesBySlug, amountInvested = fetchMyShares(Dict(groups[1].name => GROUPS[groups[1].name]), USERNAME)
+    # noSharesBySlug, yesSharesBySlug, amountInvested = fetchMyShares(GROUPS, USERNAME)
+    printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
+
+    userBalance = Dict{String, Float64}()
+
+    markets = getMarkets(getSlugs(groups))
+    lastBetId = getBets(limit=1)[1].id
+    contractIdSet = Set(market.id for market in values(markets))
+
+    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
+
+    printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+    arbitrageGroup(groups[1], APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+    # lastBetId = arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, lastBetId, contractIdSet, contractIdToGroupIndex, live, confirmBets, printDebug)
+    printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
+end
+
+function test(groupNames = nothing; live=false, confirmBets=true, printDebug=true)
+    GROUPS, APIKEY, USERNAME = readData()  
+
+    if groupNames !== nothing
+        GROUPS = Dict(name => GROUPS[name] for name in groupNames)
+    end
+
+    groups = Group.(keys(GROUPS), values(GROUPS))
+    
+    printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     noSharesBySlug, yesSharesBySlug, amountInvested = fetchMyShares(GROUPS, USERNAME)
     printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     userBalance = Dict{String, Float64}()
 
+    markets = getMarkets(getSlugs(groups))
+    lastBetId = getBets(limit=1)[1].id
+    contractIdSet = Set(market.id for market in values(markets))
+
+    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
+
+    for group in groups
+        rerun = true
+        # runs = 0
+        
+        while rerun# && runs <= 5
+            rerun = arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+        end
+    end
+
+    println("Sleeping")
+    sleep(15)
+
     printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-    arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+
+    lastBetId = arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, lastBetId, contractIdSet, contractIdToGroupIndex, live, confirmBets, printDebug)
     printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 end
 
@@ -534,28 +639,42 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)
     end
-    
-    # slugs = getSlugs(GROUPS)
-    # markets = getMarkets(slugs)
-    # processGroups!(GROUPS, markets)
 
+    groups = Group.(keys(GROUPS), values(GROUPS))
+    
     printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     noSharesBySlug, yesSharesBySlug = fetchMyShares(GROUPS, USERNAME)
     printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     userBalance = Dict{String, Float64}()
 
+    markets = getMarkets(getSlugs(groups))
+    lastBetId = getBets(limit=1)[1].id
+    contractIdSet = Set(market.id for market in values(markets))
+
+    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
+
+    for group in groups
+        rerun = true
+        # runs = 0
+        
+        while rerun# && runs <= 5
+            rerun = arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+        end
+    end
+
     while true
         # oldTime = time()
         printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
 
-        arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+        lastBetId = arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, lastBetId, contractIdSet, contractIdToGroupIndex, live, confirmBets, printDebug)
         redeemShares!(noSharesBySlug, yesSharesBySlug) # just needs to be run periodically to prevent overflow
 
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+        sleep(15 + 2*(rand()-.5) * 2.5)
+        # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
 
@@ -605,4 +724,4 @@ macro noprintlog(silent=false)
 end
 
 # @printlog "log.txt"
-# prod()
+# production()

@@ -174,10 +174,16 @@ USERNAME = "Bot"
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-three-month" = ["YES", "YES", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-month-i" = ["YES", "YES", "YES", "NO"]
 
-[GROUPS."Santos"] # Expelled, retires/etc, none
-"https://manifold.markets/jack/will-george-santos-rny-be-expelled" = ["YES", "NO", "NO"]
-"https://manifold.markets/lisamarsh/will-rep-george-santos-rny-remain-i" = ["NO", "NO", "YES"]
+[GROUPS."Santos"] # resign in 2023, first term, expelled in 2023, first term, stays, retires/etc
+"https://manifold.markets/BTE/will-george-santos-resign-by-the-en" = ["YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/BTE/will-george-santos-resign-from-cong" = ["YES", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-george-santos-rny-resign-from" = ["YES", "YES", "NO", "NO", "NO", "NO"]
 
+"https://manifold.markets/BTE/will-the-house-of-representatives-v" = ["NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-george-santos-rny-be-expelled" = ["NO", "NO", "YES", "YES", "NO", "NO"]
+
+"https://manifold.markets/lisamarsh/will-rep-george-santos-rny-remain-i" = ["NO", "NO", "NO", "NO", "YES", "NO"]
+ 
 [GROUPS."Pope Francis"] # resigns 2023, no longer in 2023 not resigned, is for 2023 but no longer in 2024 and not new pope, and new pope by 17th December 2024, still pope 2024
 "https://manifold.markets/jack/will-pope-francis-resign-by-end-of" = ["YES", "NO", "NO", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-pope-francis-jorge-m-bergoglio" = ["NO", "NO", "YES", "YES", "YES"]
@@ -243,12 +249,11 @@ USERNAME = "Bot"
 # "https://manifold.markets/NathanpmYoung/what-of-their-deposits-will-the-typ" = ["YES", "NO"]
 # "https://manifold.markets/Gigacasting/ftx-us-recovery" = ["YES", "NO"]
 
-# [GROUPS."Twitter CEO"] #Steps down by 31Jan, (Jan, 2023], NO
-# "https://manifold.markets/AmmonLam/will-elon-musk-step-down-from-being-10664c6dcb9a" = ["YES", "YES", "NO"]
-# "https://manifold.markets/AlexKirigiya/will-elon-step-down-as-head-of-twit-2e167c2d6adb" = ["YES", "YES", "NO"]
-# "https://manifold.markets/AmmonLam/will-elon-musk-step-down-from-ceo-o" = ["YES", "NO", "NO"]
-# "https://manifold.markets/kolotom99/january-2023-will-elon-musk-quit-on" = ["YES", "ZERO", "NO"]
-# "https://manifold.markets/kolotom99/will-elon-musk-be-twitters-ceo-thro" = ["NO", "NO", "YES"]
+# Wait until Feb 1
+# [GROUPS."Twitter CEO"] #Steps down by in 2023, NO
+# "https://manifold.markets/AmmonLam/will-elon-musk-step-down-from-being-10664c6dcb9a" = ["YES", "NO"]
+# "https://manifold.markets/AlexKirigiya/will-elon-step-down-as-head-of-twit-2e167c2d6adb" = ["YES", "NO"]
+# "https://manifold.markets/kolotom99/will-elon-musk-be-twitters-ceo-thro" = ["NO", "YES"]
 
 [GROUPS."Bitcoin Jan 31"]
 "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-cf3268aba8db" = ["YES", "YES", "YES", "YES", "YES", "NO"]
