@@ -1,5 +1,4 @@
-using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, ThreadsX, LinearAlgebra
-using Suppressor
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, ThreadsX, LinearAlgebra, Suppressor
 
 struct Group
     name::String
@@ -178,6 +177,7 @@ function getMarketsAndBets!(oldUserBalance, group)
                 bt = catch_backtrace()
                 println()
                 showerror(stderr, err, bt)
+                throw(err)
             end
 
             # @async try
@@ -235,6 +235,8 @@ function processGroups!(GROUPS, group, markets)
         printstyled("\nDeleted group $(group.name)\n", bold=true, underline=true)
         pop!(GROUPS, group.name)
     end
+
+    return allMarketsClosed
 end
 
 function getLimits!(userBalance, group, betsBySlug)
@@ -268,19 +270,25 @@ end
 function calculateMyShares(slugs, betsByMe)
     yesShares = Dict(slugs .=> 0.)
     noShares = Dict(slugs .=> 0.)
+    amountInvested = Dict(slugs .=> 0.)
 
     for slug in slugs
         for bet in betsByMe[slug]
             if bet.outcome == "YES"
                 yesShares[slug] += bet.shares
+                amountInvested[slug] += bet.amount
             elseif bet.outcome == "NO"
                 noShares[slug] += bet.shares
+                amountInvested[slug] -= bet.amount
             end
         end
+
+        # amountInvested[slug] = abs(amountInvested[slug])
     end
 
+
     redeemShares!(noShares, yesShares)
-    return (noShares=noShares, yesShares=yesShares)
+    return (noShares=noShares, yesShares=yesShares, amountInvested=amountInvested)
 end
 
 
@@ -289,15 +297,18 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
     
     groups = Group.(keys(GROUPS), values(GROUPS))
 
-    maxNumberOfMarkets = mapreduce(group -> group.noMarkets, max, groups)
-    maxBetAmount = botBalance / (3 + 1.5*maxNumberOfMarkets)
+    # maxNumberOfMarkets = mapreduce(group -> group.noMarkets, max, groups)
 
     @sync for group in groups
+        maxBetAmount = botBalance / (3 + 1.5*group.noMarkets)
+
         fetchTime = time()
 
         markets, betsBySlug = getMarketsAndBets!(oldUserBalance, group)
 
-        processGroups!(GROUPS, group, markets)
+        if processGroups!(GROUPS, group, markets) # if all markets in this group are closed.
+            continue
+        end
 
         limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, group, betsBySlug)
 
@@ -310,8 +321,17 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         betAmounts = optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
         # betAmounts = sols[groupNumber]
 
-        if time() - fetchTime > 600 # caching so needs to be more than 15, or sleep until then
-            markets = getMarkets(getSlugs(groups))
+        if time() - fetchTime > 10 # caching so needs to be more than 15, or sleep until then
+            @sync for slug in group.slugs
+                @async try
+                    markets[slug] = getMarketBySlug(slug)
+                catch err
+                    bt = catch_backtrace()
+                    println()
+                    showerror(stderr, err, bt)
+                end
+            end
+
             fetchTime = time()
         end
 
@@ -355,6 +375,18 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             println()
         end
 
+        if profit <= .01 * length(plannedBets)
+            # if !isempty(plannedBets)
+            #     if !printedGroupName
+            #         printstyled("=== $(group.name) ===\n", color=:bold)
+            #         printedGroupName = true
+            #     end
+
+            #     println("Insufficient profit $(profit) for $(length(plannedBets)) bets")
+            # end
+            continue
+        end
+
         skipMarket = false
         for (i, j) in enumerate(bettableSlugsIndex)
             amount = betAmounts[i]
@@ -389,17 +421,9 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
         if skipMarket
             continue
         end
-                
-        if profit <= .01 * length(plannedBets)
-            # print()
-            if !isempty(plannedBets)
-                if !printedGroupName
-                    printstyled("=== $(group.name) ===\n", color=:bold)
-                    printedGroupName = true
-                end
 
-                println("Insufficient profit $(profit) for $(length(plannedBets)) bets")
-            end
+        if sum(abs.(betAmounts)) >= botBalance - 100
+            println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet")
             continue
         end
 
@@ -424,11 +448,13 @@ function arbitrage(GROUPS, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, ol
             for bet in plannedBets 
                 @async try
                     executedBet = execute(bet, APIKEY)
+                    botBalance -= executedBet.amount
                     updateShares!(noSharesBySlug, yesSharesBySlug, urlToSlug(bet.market.url), executedBet)
                 catch err
                     bt = catch_backtrace()
                     println()
                     showerror(stderr, err, bt)
+                    throw(err)
                 end
             # print(f"Balance: {my_balance()}\n")
             end
@@ -450,6 +476,7 @@ function fetchMyShares(GROUPS, USERNAME)
             bt = catch_backtrace()
             println()
             showerror(stderr, err, bt)
+            throw(err)
         end
     end
 
@@ -491,7 +518,7 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     # processGroups!(GROUPS, markets)
 
     printstyled("Fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    noSharesBySlug, yesSharesBySlug = fetchMyShares(GROUPS, USERNAME)
+    noSharesBySlug, yesSharesBySlug, amountInvested = fetchMyShares(GROUPS, USERNAME)
     printstyled("Done fetching my Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     userBalance = Dict{String, Float64}()
@@ -528,7 +555,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(120 + 2*(rand()-.5) * 20) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+        sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
 
