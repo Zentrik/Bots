@@ -69,12 +69,15 @@ function redeemShares!(noSharesBySlug, yesSharesBySlug)
     # @assert mapreduce(slug -> min(noSharesBySlug[slug], yesSharesBySlug[slug]), max, getSlugs(GROUPS)) ≈ 0
 end
 
-function f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, currentNoShares, currentYesShares, bettableSlugsIndex, newProb)
+function f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, currentNoShares, currentYesShares, bettableSlugsIndex)
     A = zeros(size(group.y_matrix)[1])
     B = zeros(size(group.n_matrix)[1])
     profitsByEvent = zeros(size(group.y_matrix)[1])
 
-    return f!(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, currentNoShares, currentYesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent)
+    # newProb = zeros(group.noMarkets) # Makes it obvious which markets we don't bet on. We can print this manually, but this hides errors in fetching market probabilities
+    newProb = [markets[slug].probability::Float64 for slug in group.slugs] # So we return the correct results for markets we don't bet on  and closing soon markets
+
+    return f!(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, currentNoShares, currentYesShares, bettableSlugsIndex, copy(newProb), A, B, profitsByEvent)
 end
 
 function f!(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, currentNoShares, currentYesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent)
@@ -113,7 +116,7 @@ function f!(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, curr
 end
 
 function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmount, noSharesBySlug, yesSharesBySlug, bettableSlugsIndex)
-    newProb = [markets[slug].probability::Float64 for slug in group.slugs]
+    newProb = zeros(group.noMarkets)
     noShares = [noSharesBySlug[slug] for slug in group.slugs]
     yesShares = [yesSharesBySlug[slug] for slug in group.slugs]
 
@@ -132,7 +135,7 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
     sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
-    maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex, newProb).profitsByEvent |> minimum
+    maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
     nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
 
@@ -140,7 +143,7 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
         betAmount::Vector{Float64} = copy(sol.u)
         betAmount[indices] .= 0
 
-        riskFreeProfit = f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex, newProb).profitsByEvent |> minimum
+        riskFreeProfit = f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
         if riskFreeProfit > maxRiskFreeProfit
             maxRiskFreeProfit = riskFreeProfit
@@ -383,9 +386,9 @@ function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug
     oldNoShares = [noSharesBySlug[slug] for slug in group.slugs]
     oldYesShares = [yesSharesBySlug[slug] for slug in group.slugs]
 
-    newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
+    newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex)
 
-    oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex, oldProb)
+    oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, limitOrdersBySlug, sortedLimitProbs, oldNoShares, oldYesShares, bettableSlugsIndex)
 
     profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
     newYesShares = yesShares .- oldYesShares
