@@ -342,10 +342,16 @@ function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug
     # end
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
+    allMarketsClosing = true
     for slug in group.slugs
-        if isMarketClosingSoon(markets[slug])
-            return false
+        if !isMarketClosingSoon(markets[slug])
+            allMarketsClosing = false
         end
+    end
+
+    if allMarketsClosing
+        printstyled("$(group.name) all markets closed at $(Dates.format(now(), "HH:MM:SS.sss"))\n", bold=true, underline=true)
+        return false
     end
 
     limitOrdersBySlug, sortedLimitProbs, splitBets = getLimits!(oldUserBalance, group, betsBySlug)
@@ -428,12 +434,13 @@ function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug
             bet = PlannedBet(abs(amount), newYesShares[j] + newNoShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
             push!(plannedBets, bet)
             
-            if abs(amount) >= .95 * maxBetAmount
-                println("Bet size is $(100 * amount/maxBetAmount)% of maxBetAmount")
+            if abs(amount) >= .98 * maxBetAmount
+                printstyled("Bet size is $(100 * amount/maxBetAmount)% of maxBetAmount\n", color=:orange)
                 bindingConstraint = true
             end
 
             if amount ≈ 1
+                printstyled("Bet size is $amount\n", color=:orange)
                 bindingConstraint = true
             end
         else
@@ -502,17 +509,17 @@ end
 
 function arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalances, lastBetId, contractIdSet, contractIdToGroupIndex, live=false, confirmBets=true, printDebug=true)
     bets = getLiveBets(lastBetId)
-    println(length(bets)+1)
+    println(length(bets))
 
     seenGroups = Set{Int}()
 
     for bet in bets
-        if bet.contractId in contractIdSet && contractIdToGroupIndex[bet.contractId] ∉ seenGroups && bet.userUsername != USERNAME && bet.limitProb === nothing
+        if bet.contractId in contractIdSet && contractIdToGroupIndex[bet.contractId] ∉ seenGroups && bet.userUsername != USERNAME && (bet.limitProb === nothing || !(bet.probAfter ≈ bet.probBefore))
             rerun = true
             # runs = 0
             
             while rerun# && runs <= 5
-                println("Running $(groups[contractIdToGroupIndex[bet.contractId]].name)")
+                printstyled("Running $(groups[contractIdToGroupIndex[bet.contractId]].name)\n", color=:light_cyan)
                 rerun = arbitrageGroup(groups[contractIdToGroupIndex[bet.contractId]], APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, oldUserBalances, live, confirmBets, printDebug)
             end
             push!(seenGroups, contractIdToGroupIndex[bet.contractId])
@@ -609,8 +616,8 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
 
     userBalance = Dict{String, Float64}()
 
-    markets = getMarkets(getSlugs(groups))
     lastBetId = getBets(limit=1)[1].id
+    markets = getMarkets(getSlugs(groups))
     contractIdSet = Set(market.id for market in values(markets))
 
     contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
@@ -648,8 +655,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     userBalance = Dict{String, Float64}()
 
-    markets = getMarkets(getSlugs(groups))
     lastBetId = getBets(limit=1)[1].id
+    markets = getMarkets(getSlugs(groups))
     contractIdSet = Set(market.id for market in values(markets))
 
     contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)

@@ -51,16 +51,17 @@ USERNAME = "Bot"
 "https://manifold.markets/MarketManagerBot/will-the-2024-presidential-race-be" = ["YES", "NO"]
 "https://manifold.markets/BoltonBailey/will-the-2024-election-be-a-bidentr" = ["YES", "NO"]
 
-[GROUPS."Democratic Nominee"] # Biden, Harris, Warren, Newsom, Buttigieg, Psaki, Destiny, Other
-"https://manifold.markets/NathanpmYoung/will-biden-be-the-2024-democratic-n" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/MarketManagerBot/will-kamala-harris-be-the-democrati" = ["NO", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/MarketManagerBot/will-elizabeth-warren-be-the-democr" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/MarketManagerBot/will-gavin-newsom-be-the-democratic" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/JamesGrugett/will-pete-buttigieg-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/dglid/will-jen-psaki-be-the-2024-democrat" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
-"https://manifold.markets/NewPlace2Frown/will-destiny-be-the-2024-democratic" = ["NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO"]
+[GROUPS."Democratic Nominee"] # Biden, Harris, Warren, Newsom, Buttigieg, Psaki, Destiny, Clinton, Other
+"https://manifold.markets/NathanpmYoung/will-biden-be-the-2024-democratic-n" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-kamala-harris-be-the-democrati" = ["NO", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-elizabeth-warren-be-the-democr" = ["NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/MarketManagerBot/will-gavin-newsom-be-the-democratic" = ["NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/JamesGrugett/will-pete-buttigieg-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/dglid/will-jen-psaki-be-the-2024-democrat" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/NewPlace2Frown/will-destiny-be-the-2024-democratic" = ["NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
+"https://manifold.markets/jack/will-hilary-clinton-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "NO", "NO", "YES", "YES", "NO"]
 
-"https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES", "YES"]
+"https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES", "YES", "YES"]
 
 
 [GROUPS."Republican Nominee"] # DeSantis, Trump, Pence, Haley, Pompeo, Youngkin, Other
