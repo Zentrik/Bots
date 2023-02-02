@@ -311,7 +311,7 @@ function getLiveBets(lastBetId)
     lastBetFetched = nothing
 
     while !gotAllBets && numberOfBetsFetched <= 100
-        tmp = getBets(limit=5, before=lastBetFetched)
+        tmp = getBets(limit=3+rand(0:5), before=lastBetFetched)
 
         for (i, bet) in enumerate(tmp) # probably faster to go in reverse
             if bet.id == lastBetId
@@ -438,12 +438,12 @@ function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug
             push!(plannedBets, bet)
             
             if abs(amount) >= .98 * maxBetAmount
-                printstyled("Bet size is $(100 * amount/maxBetAmount)% of maxBetAmount\n", color=:orange)
+                printstyled("Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount\n", color=:orange)
                 bindingConstraint = true
             end
 
-            if amount ≈ 1
-                printstyled("Bet size is $amount\n", color=:orange)
+            if abs(amount) ≈ 1
+                printstyled("Bet size is $abs(amount)\n", color=:orange)
                 bindingConstraint = true
             end
         else
@@ -573,6 +573,13 @@ function readData()
         error()
     end
 
+    for slug in slugs
+        if '#' in slug
+            println("Invalid Slug $slug")
+            error()
+        end
+    end
+
     return GROUPS, APIKEY, USERNAME
 end
 
@@ -643,7 +650,7 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 end
 
-function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false)
+function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
     GROUPS, APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
@@ -664,12 +671,14 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
 
-    for group in groups
-        rerun = true
-        # runs = 0
-        
-        while rerun# && runs <= 5
-            rerun = arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+    if !skip
+        for group in groups
+            rerun = true
+            # runs = 0
+            
+            while rerun# && runs <= 5
+                rerun = arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
+            end
         end
     end
 
@@ -683,7 +692,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(15 + 2*(rand()-.5) * 2.5)
+        sleep(7.5 + rand())
         # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end

@@ -7,21 +7,21 @@ USERNAME = "Bot"
 "https://manifold.markets/jack/will-isaacking-lose-his-trustworthy-ec06dc536f2c" = ["YES", "ZERO", "NO"]
 "https://manifold.markets/IsaacKing/will-i-lose-my-trustworthy-ish-badg" = ["YES", "ZERO", "NO"]
 
-[GROUPS."Monkeypox Jan"]
-"https://manifold.markets/egroj/will-there-be-85000-confirmed-cases-1653cfa1ac3b" = ["YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-there-be-85000-confirmed-cases-e43a4ea75998" = ["YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-there-be-85250-confirmed-cases" = ["YES", "YES", "YES", "YES", "NO", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-there-be-85500-confirmed-cases" = ["YES", "YES", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-there-be-85750-confirmed-cases" =  ["YES", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-there-be-86000-confirmed-cases" =  ["YES", "NO", "NO", "NO", "NO", "NO"]
+# [GROUPS."Monkeypox Jan"]
+# "https://manifold.markets/egroj/will-there-be-85000-confirmed-cases-1653cfa1ac3b" = ["YES", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-there-be-85000-confirmed-cases-e43a4ea75998" = ["YES", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-there-be-85250-confirmed-cases" = ["YES", "YES", "YES", "YES", "NO", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-there-be-85500-confirmed-cases" = ["YES", "YES", "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-there-be-85750-confirmed-cases" =  ["YES", "YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-there-be-86000-confirmed-cases" =  ["YES", "NO", "NO", "NO", "NO", "NO"]
 
-[GROUPS."Monkeypox average"] # below 35, 30, 25, 20, 15, 10, none
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-8d7f3b3669c8" = ["NO", "YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-4d8e01b57e33" = ["NO", "NO", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-31db52af11d9" = ["NO", "NO", "NO", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-362d6729accc" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
-"https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-8a43e5b128c6" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO"]
+# [GROUPS."Monkeypox average"] # below 35, 30, 25, 20, 15, 10, none
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-8d7f3b3669c8" = ["NO", "YES", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-4d8e01b57e33" = ["NO", "NO", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-31db52af11d9" = ["NO", "NO", "NO", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-362d6729accc" = ["NO", "NO", "NO", "NO", "YES", "YES", "NO"]
+# "https://manifold.markets/egroj/will-mpox-monkeypox-7day-average-ca-8a43e5b128c6" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO"]
 
 [GROUPS.Biden2ndTerm]
 "https://manifold.markets/NcyRocks/will-joe-biden-run-for-president-in" = ["YES", "NO"]
@@ -59,7 +59,7 @@ USERNAME = "Bot"
 "https://manifold.markets/JamesGrugett/will-pete-buttigieg-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO", "NO"]
 "https://manifold.markets/dglid/will-jen-psaki-be-the-2024-democrat" = ["NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"]
 "https://manifold.markets/NewPlace2Frown/will-destiny-be-the-2024-democratic" = ["NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO"]
-"https://manifold.markets/jack/will-hilary-clinton-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "NO", "NO", "YES", "YES", "NO"]
+"https://manifold.markets/jack/will-hilary-clinton-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO"]
 
 "https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES", "YES", "YES"]
 
@@ -96,17 +96,23 @@ USERNAME = "Bot"
 "https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO"]
 "https://manifold.markets/Nostradamnedus/will-elon-musk-be-the-worlds-riches" = ["YES", "NO"]
 
-[GROUPS."Nuclear Weapons Detonation 2023"]
-"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-e717f6cb823f" = ["YES", "NO", "NO"]
-"https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-b71e74f6a8e4" = ["YES", "YES", "NO"]
-"https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-af0ba4d66245" = ["YES", "YES", "NO"]
-"https://manifold.markets/kolotom99/will-a-nuclear-weapon-be-detonated-41dfff460cab" = ["YES", "YES", "NO"]
-"https://manifold.markets/ACXBot/8-will-a-nuclear-weapon-be-detonate" = ["YES", "YES", "NO"]
+[GROUPS."Nuclear Weapons Detonation 2023"] # (feb16, april, june 9, july, 2023) North korea, (july, 2023) anywhere else, other
+"https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-49edd0c42325" = ["YES", "YES", "YES", "YES", "NO", "YES", "NO", "NO"]
 
-[GROUPS."NK Test"]
-"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-2e1a1fd10302" = ["YES", "NO", "NO", "NO"]
-"https://manifold.markets/finnhambly/will-north-korea-conduct-a-nuclear-8d503ed25d3a" = ["YES", "YES", "NO", "NO"]
-"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-36f06f22f954" = ["YES", "YES", "YES", "NO"]
+"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-2e1a1fd10302" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/finnhambly/will-north-korea-conduct-a-nuclear-8d503ed25d3a" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-e717f6cb823f" = ["YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-36f06f22f954" = ["YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO"]
+
+"https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-b71e74f6a8e4" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-af0ba4d66245" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/kolotom99/will-a-nuclear-weapon-be-detonated-41dfff460cab" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/ACXBot/8-will-a-nuclear-weapon-be-detonate" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+
+# [GROUPS."NK Test"]
+# "https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-2e1a1fd10302" = ["YES", "NO", "NO", "NO"]
+# "https://manifold.markets/finnhambly/will-north-korea-conduct-a-nuclear-8d503ed25d3a" = ["YES", "YES", "NO", "NO"]
+# "https://manifold.markets/jack/will-north-korea-conduct-a-nuclear-36f06f22f954" = ["YES", "YES", "YES", "NO"]
 
 [GROUPS."Russia Mobilisation"]
 "https://manifold.markets/Nostradamnedus/will-russia-begin-a-new-wave-of-mob" = ["YES", "NO", "NO"]
@@ -251,17 +257,18 @@ USERNAME = "Bot"
 # "https://manifold.markets/Gigacasting/ftx-us-recovery" = ["YES", "NO"]
 
 # Wait until Feb 1
-# [GROUPS."Twitter CEO"] #Steps down by in 2023, NO
-# "https://manifold.markets/AmmonLam/will-elon-musk-step-down-from-being-10664c6dcb9a" = ["YES", "NO"]
-# "https://manifold.markets/AlexKirigiya/will-elon-step-down-as-head-of-twit-2e167c2d6adb" = ["YES", "NO"]
-# "https://manifold.markets/kolotom99/will-elon-musk-be-twitters-ceo-thro" = ["NO", "YES"]
+[GROUPS."Twitter CEO"] #Steps down by in 2023 for twitter, not twitter but tesla/spacex, doesn't step down for anything
+"https://manifold.markets/AmmonLam/will-elon-musk-step-down-from-being-10664c6dcb9a" = ["YES", "NO", "NO"]
+"https://manifold.markets/AlexKirigiya/will-elon-step-down-as-head-of-twit-2e167c2d6adb" = ["YES", "NO", "NO"]
+"https://manifold.markets/itsTomekK/2023-will-elon-musk-quit-one-of-his" = ["YES", "YES", "NO"]
+"https://manifold.markets/kolotom99/will-elon-musk-be-twitters-ceo-thro" = ["NO", "YES", "YES"]
 
-[GROUPS."Bitcoin Jan 31"]
-"https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-cf3268aba8db" = ["YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-5937b3f28c19" = ["YES", "YES", "YES", "YES", "NO", "NO"]
-"https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-7d857cd12011" = ["YES", "YES", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-77274addf142" = ["YES", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-e2d1ecf65d0a" = ["YES", "NO", "NO", "NO", "NO", "NO"]
+# [GROUPS."Bitcoin Jan 31"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-cf3268aba8db" = ["YES", "YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-5937b3f28c19" = ["YES", "YES", "YES", "YES", "NO", "NO"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-7d857cd12011" = ["YES", "YES", "YES", "NO", "NO", "NO"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-77274addf142" = ["YES", "YES", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/AmmonLam/will-the-closing-price-of-bitcoin-o-e2d1ecf65d0a" = ["YES", "NO", "NO", "NO", "NO", "NO"]
 
 [GROUPS."Nuclear Weapons"]
 "https://manifold.markets/AmmonLam/will-a-nuclear-weapon-cause-over-10" = ["YES", "YES", "YES", "NO"]
@@ -342,12 +349,16 @@ USERNAME = "Bot"
 "zhttps://manifold.markets/kolotom99/2023-will-bitcoin-reach-60000" = ["YES", "NO", "NO", "NO", "NO"]
 # "https://manifold.markets/Gigacasting/will-bitcoin-go-above-30k-for-at-le"
 
-[GROUPS."Destiny Subs end of Jan"]
-# "https://manifold.markets/ORACLE/will-destiny-reach-610k-subscribers-f6cf1c1a7f11" = ["YES", "YES", "YES", "YES", "NO"]
-# "https://manifold.markets/GeneFama/will-destiny-reach-610k-subscribers" = ["YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/GeneFama/will-destiny-reach-615k-subscribers" = ["NO", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/GeneFama/will-destiny-reach-620k-subscribers-4efda08eccc3" = ["NO", "NO", "YES", "YES", "NO"]
-"https://manifold.markets/GeneFama/will-destiny-reach-625k-subscribers" = ["NO", "NO", "NO", "YES", "NO"]
+# [GROUPS."Destiny Subs end of Jan"]
+# # "https://manifold.markets/ORACLE/will-destiny-reach-610k-subscribers-f6cf1c1a7f11" = ["YES", "YES", "YES", "YES", "NO"]
+# # "https://manifold.markets/GeneFama/will-destiny-reach-610k-subscribers" = ["YES", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/GeneFama/will-destiny-reach-615k-subscribers" = ["NO", "YES", "YES", "YES", "NO"]
+# "https://manifold.markets/GeneFama/will-destiny-reach-620k-subscribers-4efda08eccc3" = ["NO", "NO", "YES", "YES", "NO"]
+# "https://manifold.markets/GeneFama/will-destiny-reach-625k-subscribers" = ["NO", "NO", "NO", "YES", "NO"]
+
+[GROUPS."Destiny Subs end of Feb"]
+"https://manifold.markets/johnleoks/will-destiny-have-630k-subs-by-the" = ["YES", "YES", "NO"]
+"https://manifold.markets/Simon1551/will-destiny-reach-650k-subscribers" = ["YES", "NO", "NO"]
 
 [GROUPS."Destiny Subs end of Year"]
 "https://manifold.markets/MagniorBjornsson/will-destiny-reach-1000000-subscrib" = ["YES", "NO"]
@@ -495,17 +506,35 @@ USERNAME = "Bot"
 "https://manifold.markets/robotwife/will-destiny-complete-the-true-endi" = ["YES", "NO"]
 
 [GROUPS."Destiny Factorio Feb"]
-"https://manifold.markets/VictorForsgren/will-destiny-beat-factorio-space-ex" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/Sognik/will-destiny-finish-the-factorio-sp-befab0fec85e" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/Gen/does-destiny-finish-factorio-before" = ["YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/AlexLiesman/will-destiny-finish-factorio-before-42a317a7aaf9" = ["YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/PryingMind/next-two-months-does-he-finish-fact" = ["YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/Ahdaymz/will-destiny-finish-factorio-by-feb" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/PatrickNotthestarfish/will-destiny-finish-factorio-before-dea2c2333fcb" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-37346f4ec9b5" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO"]
-"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-514825d1d5ac" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/VictorForsgren/will-destiny-beat-factorio-space-ex" =      ["YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Sognik/will-destiny-finish-the-factorio-sp-befab0fec85e" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+# "https://manifold.markets/GappyV/will-destiny-beat-factorio-before-t" =              ["YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Gen/does-destiny-finish-factorio-before" =                 ["YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/dggL/will-destiny-finish-factorio-in-the" =                ["YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/AlexLiesman/will-destiny-finish-factorio-before-42a317a7aaf9" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/PryingMind/next-two-months-does-he-finish-fact" =          ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/Ahdaymz/will-destiny-finish-factorio-by-feb" =             ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/PatrickNotthestarfish/will-destiny-finish-factorio-before-dea2c2333fcb" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the" =             ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-37346f4ec9b5" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-514825d1d5ac" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 
 [GROUPS."Destiny 950"]
 "https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o" = ["YES", "NO", "NO"]
 "https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o-d709b69efc79" = ["YES", "YES", "NO"]
+
+[GROUPS."Eurovision"]
+"https://manifold.markets/Yoav/will-ukraine-win-eurovision-2023" = ["YES", "NO"]
+"https://manifold.markets/DFWolves/will-ukraine-win-eurovision-2023-1f38d46a2d38" = ["YES", "NO"]
+
+[GROUPS."Lex Fridman Make Market"]
+"https://manifold.markets/BTE/will-lex-fridman-create-a-market-on-c9e0364dbec9" = ["YES", "NO"]
+"https://manifold.markets/PatrickDelaney/lex-fridman-will-not-create-a-marke" = ["NO", "YES"]
+
+[GROUPS."Lex Fridman Podcast"]
+"https://manifold.markets/egroj/will-someone-from-manifold-appear-i" = ["YES", "NO"]
+"https://manifold.markets/GustavoMafra/will-any-manifold-founder-or-fte-be" = ["YES", "NO"]
+
+[GROUPS."Lex Fridman AI"]
+"https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20" = ["YES", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20-92f297e2645e" = ["YES", "YES", "NO"]
