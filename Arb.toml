@@ -519,9 +519,10 @@ USERNAME = "Bot"
 "https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-37346f4ec9b5" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO", "NO"]
 "https://manifold.markets/DesTiny/will-destiny-finish-factorio-by-the-514825d1d5ac" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 
-[GROUPS."Destiny 950"]
-"https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o" = ["YES", "NO", "NO"]
-"https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o-d709b69efc79" = ["YES", "YES", "NO"]
+[GROUPS."Destiny 950"] # 940-950 feb, 950 feb, 950 march, none
+"https://manifold.markets/DesTiny/will-destiny-hit-a-940-by-the-end-o" = ["YES", "YES", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o" = ["NO", "YES", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-hit-a-950-by-the-end-o-d709b69efc79" = ["NO", "YES", "YES", "NO"]
 
 [GROUPS."Eurovision"]
 "https://manifold.markets/Yoav/will-ukraine-win-eurovision-2023" = ["YES", "NO"]
@@ -538,3 +539,26 @@ USERNAME = "Bot"
 [GROUPS."Lex Fridman AI"]
 "https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20" = ["YES", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20-92f297e2645e" = ["YES", "YES", "NO"]
+
+[GROUPS."Fed Funds Rate"]
+"https://manifold.markets/Gigacasting/will-the-fed-raise-benchmark-rates-1102ff6b1a79" = ["YES", "YES", "NO"]
+"https://manifold.markets/jack/will-the-fed-raise-the-fed-funds-ra-b7103e6f1fbf" = ["YES", "YES", "NO"]
+"https://manifold.markets/jack/will-the-fed-raise-the-fed-funds-ra-9a9982dba5ce" = ["YES", "NO", "NO"]
+
+[GROUPS."Destiny Video Feb"]
+"https://manifold.markets/DesTiny/will-destiny-post-a-video-in-februa" = ["YES", "YES", "YES", "YES", "YES", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-post-a-video-in-februa-7288d5b7cc94" = ["YES", "YES", "YES", "YES", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-post-a-video-in-februa-86aae36587c1" = ["YES", "YES", "YES", "NO", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-post-a-video-in-februa-242810cc5a13" = ["YES", "YES", "NO", "NO", "NO", "NO"]
+"https://manifold.markets/DesTiny/will-destiny-post-a-video-in-februa-857cf91900cb" = ["YES", "NO", "NO", "NO", "NO", "NO"]
+
+[GROUPS."China Invasion"] # Invades in 2023, not in 2023 but in 2024, not in 2023/2024 before 2030, after 2030/never
+"https://manifold.markets/mrb/will-china-invade-taiwan-before-the" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/ConnorTabarrk/will-china-launch-a-bootsonthegroun-45e8ae2c7581" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/ACXBot/10-will-china-launch-a-fullscale-in" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/a/china-will-not-launch-a-fullscale-i" = ["NO", "YES", "YES", "YES"]
+
+"https://manifold.markets/Paul/will-china-invade-taiwan-in-2024" = ["NO", "YES", "NO", "NO"]
+"https://manifold.markets/dreev/will-china-invade-taiwan-by-the-end" = ["YES", "YES", "NO", "NO"]
+
+"https://manifold.markets/MetaculusBot/will-china-launch-a-fullscale-invas" = ["YES", "YES", "YES", "NO"]
