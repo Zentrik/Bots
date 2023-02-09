@@ -306,11 +306,9 @@ function getLiveBets(lastBetId)
     gotAllBets = false
     Bets = Bet[]
 
-    numberOfBetsFetched = 0
-
     lastBetFetched = nothing
 
-    while !gotAllBets && numberOfBetsFetched <= 100
+    while !gotAllBets
         tmp = getBets(limit=3+rand(0:5), before=lastBetFetched)
 
         for (i, bet) in enumerate(tmp) # probably faster to go in reverse
@@ -321,7 +319,6 @@ function getLiveBets(lastBetId)
             end
         end
 
-        numberOfBetsFetched += 10
         lastBetFetched = tmp[end].id
 
         if !gotAllBets
@@ -599,15 +596,8 @@ function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
 
     userBalance = Dict{String, Float64}()
 
-    markets = getMarkets(getSlugs(groups))
-    lastBetId = getBets(limit=1)[1].id
-    contractIdSet = Set(market.id for market in values(markets))
-
-    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
-
     printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
     arbitrageGroup(groups[1], APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, live, confirmBets, printDebug)
-    # lastBetId = arbitrage(groups, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug, userBalance, lastBetId, contractIdSet, contractIdToGroupIndex, live, confirmBets, printDebug)
     printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 end
 
@@ -692,7 +682,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(7.5 + rand())
+        sleep(15 + rand())
         # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
