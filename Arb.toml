@@ -1,5 +1,6 @@
 APIKEY = "057fa467-501a-47b8-9b23-36041d1a8388"
 USERNAME = "Bot"
+ID = "dNgcgrHGn8ZB30hyDARNtbjvGPm1"
 
 [GROUPS."Isaac Trustworthiness"] # in Jan, not in Jan, none
 "https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO", "NO"]
@@ -458,9 +459,9 @@ USERNAME = "Bot"
 "https://manifold.markets/WeatherIsNiceUpHere/will-trump-post-on-instagram-before" = ["YES", "NO"]
 "https://manifold.markets/itsTomekK/donald-trumps-return-on-instagram-w" = ["YES", "NO"]
 
-[GROUPS."Chess"]
-"https://manifold.markets/citrinitas/will-black-win-in-manifold-plays-ch" = ["YES", "NO"]
-"https://manifold.markets/jfjurchen/will-the-will-black-win-in-manifold" = ["YES", "NO"]
+# [GROUPS."Chess"]
+# "https://manifold.markets/citrinitas/will-black-win-in-manifold-plays-ch" = ["YES", "NO"]
+# "https://manifold.markets/jfjurchen/will-the-will-black-win-in-manifold" = ["YES", "NO"]
 
 # [GROUPS."Destiny Stream"]
 # "https://manifold.markets/YE2/will-destiny-stream-on-youtube-befo" = ["YES", "NO", "NO", "NO"]
