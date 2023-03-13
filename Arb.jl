@@ -132,22 +132,42 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
+    # sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
+    sol = solve(problem, BBO_resampling_memetic_search(), maxtime=4.)
+    println(sol.u)
+    println(sol.objective)
+    # println(sol.original)
+    # BBO_adaptive_de_rand_1_bin() works fines in general and quick to have low abstol, xnes works better in that specific scenario and Resampling Memetic Searchers works very well in that specic scenario.
+
+    sol4 = solve(problem, BBO_xnes(), maxtime=4.)
+    println(sol4.u)
+    println(sol4.objective)
+
+    sol3 = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
+    println(sol3.u)
+    println(sol3.objective)
+
+    problem = Optimization.OptimizationProblem(profitF, sol.u, lb=[min(.8u, u - 20) for u in sol.u], ub=[max(1.2u, u + 20) for u in sol.u])
+    sol2 = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1.)
+    println(sol2.u)
+    println(sol2.objective)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
     nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
 
-    for indices in powerset(nonZeroIndices)
-        betAmount::Vector{Float64} = copy(sol.u)
-        betAmount[indices] .= 0
+    for solution in (sol, sol2)
+        for indices in powerset(nonZeroIndices)
+            betAmount::Vector{Float64} = copy(solution.u)
+            betAmount[indices] .= 0
 
-        riskFreeProfit = f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
+            riskFreeProfit = f(betAmount, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
-        if riskFreeProfit > maxRiskFreeProfit
-            maxRiskFreeProfit = riskFreeProfit
-            bestSolution = betAmount
+            if riskFreeProfit > maxRiskFreeProfit
+                maxRiskFreeProfit = riskFreeProfit
+                bestSolution = betAmount
+            end
         end
     end
 
@@ -440,7 +460,7 @@ function arbitrageGroup(group, APIKEY, USERNAME, noSharesBySlug, yesSharesBySlug
             end
 
             if abs(amount) ≈ 1
-                printstyled("Bet size is $abs(amount)\n", color=:orange)
+                printstyled("Bet size is $(abs(amount))\n", color=:orange)
                 bindingConstraint = true
             end
         else
