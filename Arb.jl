@@ -133,31 +133,42 @@ function optimise(group, markets, limitOrdersBySlug, sortedLimitProbs, maxBetAmo
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
     # sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
-    sol = solve(problem, BBO_resampling_memetic_search(), maxtime=4.)
-    println(sol.u)
-    println(sol.objective)
+    sol = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
+    # println(sol.u)
+    # println(sol.objective)
     # println(sol.original)
     # BBO_adaptive_de_rand_1_bin() works fines in general and quick to have low abstol, xnes works better in that specific scenario and Resampling Memetic Searchers works very well in that specic scenario.
 
-    sol4 = solve(problem, BBO_xnes(), maxtime=4.)
-    println(sol4.u)
-    println(sol4.objective)
+    # sol4 = solve(problem, BBO_xnes(), maxtime=4.)
+    # println(sol4.u)
+    # println(sol4.objective)
 
-    sol3 = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
-    println(sol3.u)
-    println(sol3.objective)
+    sol3 = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=2.)
+    # println(sol3.u)
+    # println(sol3.objective)
 
-    problem = Optimization.OptimizationProblem(profitF, sol.u, lb=[min(.8u, u - 20) for u in sol.u], ub=[max(1.2u, u + 20) for u in sol.u])
-    sol2 = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1.)
-    println(sol2.u)
-    println(sol2.objective)
+    # println(group.name)
+    # println(sol.u)
+    # println([min(.8u, 1.2u, u - 20) for u in sol.u])
+    # println([max(0.8u, 1.2u, u + 20) for u in sol.u])
+    # println()
+
+    problem = Optimization.OptimizationProblem(profitF, sol.u, lb=[min(.8u, 1.2u, u - 20) for u in sol.u], ub=[max(0.8u, 1.2u, u + 20) for u in sol.u]) #min(.8u, u - 20) doesn't work properly for -ve u, .8u > u in that case which is not what we want.
+
+    sol2 = try
+        return solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1.)
+    catch _
+        return sol
+    end
+    # println(sol2.u)
+    # println(sol2.objective)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, limitOrdersBySlug, sortedLimitProbs, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
     nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
 
-    for solution in (sol, sol2)
+    for solution in (sol, sol2, sol3)
         for indices in powerset(nonZeroIndices)
             betAmount::Vector{Float64} = copy(solution.u)
             betAmount[indices] .= 0
