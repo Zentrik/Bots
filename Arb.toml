@@ -105,9 +105,9 @@ USERNAME = "Bot"
 "https://manifold.markets/kolotom99/will-a-nuclear-weapon-be-detonated-41dfff460cab" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 "https://manifold.markets/ACXBot/8-will-a-nuclear-weapon-be-detonate" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 
-[GROUPS."Russia Mobilisation"]
-"https://manifold.markets/Nostradamnedus/will-russia-begin-a-new-wave-of-mob" = ["YES", "NO", "NO"]
-"https://manifold.markets/kolotom99/will-russia-begin-a-new-wave-of-mob-bb11ce38d81f" = ["YES", "YES", "NO"]
+# [GROUPS."Russia Mobilisation"]
+# "https://manifold.markets/Nostradamnedus/will-russia-begin-a-new-wave-of-mob" = ["YES", "NO", "NO"]
+# "https://manifold.markets/kolotom99/will-russia-begin-a-new-wave-of-mob-bb11ce38d81f" = ["YES", "YES", "NO"]
 
 [GROUPS."Trump Indictment"] # (and arrested, and flees, and not other) in Jan, in Feb, in March, in 2023 bar Jan/Feb/March, none
 "https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim" = ["YES", "NO", "NO", "NO",   "YES", "NO", "NO","NO",   "YES", "NO", "NO","NO",   "NO"]
@@ -325,9 +325,9 @@ USERNAME = "Bot"
 "zhttps://manifold.markets/kolotom99/2023-will-bitcoin-reach-60000" = ["YES", "NO", "NO", "NO", "NO"]
 # "https://manifold.markets/Gigacasting/will-bitcoin-go-above-30k-for-at-le"
 
-[GROUPS."Destiny Subs end of Feb"]
-"https://manifold.markets/johnleoks/will-destiny-have-630k-subs-by-the" = ["YES", "YES", "NO"]
-"https://manifold.markets/Simon1551/will-destiny-reach-650k-subscribers" = ["YES", "NO", "NO"]
+# [GROUPS."Destiny Subs end of Feb"]
+# "https://manifold.markets/johnleoks/will-destiny-have-630k-subs-by-the" = ["YES", "YES", "NO"]
+# "https://manifold.markets/Simon1551/will-destiny-reach-650k-subscribers" = ["YES", "NO", "NO"]
 
 [GROUPS."Destiny Subs end of Year"]
 "https://manifold.markets/MagniorBjornsson/will-destiny-reach-1000000-subscrib" = ["YES", "NO"]
@@ -354,7 +354,7 @@ USERNAME = "Bot"
 
 [GROUPS."DAUs EOY"]
 "https://manifold.markets/kolotom99/will-manifold-hit-2022-active-daily-66e8cb67108c" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO"]
-"https://manifold.markets/IsaacKing/will-manifold-break-its-current-rec" = ["YES", "YES", "YES", "YES", "YES", "NO", "NO"]
+"https://manifold.markets/IsaacKing/will-manifold-break-its-current-rec" =              ["YES", "YES", "YES", "YES", "YES", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-manifold-hit-5000-active-users-7c1681b46fd7" = ["YES", "YES", "YES", "YES", "NO", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-manifold-hit-10000-active-user-e999d9083a8f" = ["YES", "YES", "YES", "NO", "NO", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-manifold-hit-10000-active-user-1094099de567" = ["YES", "YES", "YES", "NO", "NO", "NO", "NO"]
@@ -382,9 +382,9 @@ USERNAME = "Bot"
 "https://manifold.markets/Predictor/will-twitter-accept-dogecoin-doge-a" = ["YES", "NO", "NO"]
 "https://manifold.markets/ACXBot/38-will-any-faang-or-musk-company-a" = ["YES", "YES", "NO"]
 
-[GROUPS."Eth Feb 28"]
-"https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1300-c99a924f8715" = ["YES", "YES", "NO"]
-"https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1400" = ["YES", "NO", "NO"]
+# [GROUPS."Eth Feb 28"]
+# "https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1300-c99a924f8715" = ["YES", "YES", "NO"]
+# "https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1400" = ["YES", "NO", "NO"]
 
 [GROUPS."Binance"]
 "https://manifold.markets/tofu/will-binance-becomes-insolventdecla" = ["YES", "NO", "NO"]
@@ -417,9 +417,9 @@ USERNAME = "Bot"
 "https://manifold.markets/NoaNabeshima/if-prediction-markets-become-mostly" = ["NO", "YES", "NO", "NO"]
 "https://manifold.markets/NoaNabeshima/conditional-on-prediction-markets-b" = ["NO", "NO", "YES", "NO"]
 
-[GROUPS."Russian Troop Loss"]
-"https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more" = ["YES", "NO", "NO"]
-"https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more-dbdcf46d24d3" = ["YES", "YES", "NO"]
+# [GROUPS."Russian Troop Loss"]
+# "https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more" = ["YES", "NO", "NO"]
+# "https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more-dbdcf46d24d3" = ["YES", "YES", "NO"]
 
 [GROUPS."Carson State Entity"]
 "https://manifold.markets/CarsonGale/will-a-us-state-government-entity-c" = ["YES", "YES", "NO"]
