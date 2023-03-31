@@ -16,13 +16,6 @@ USERNAME = "Bot"
 "https://manifold.markets/NcyRocks/will-joe-biden-run-for-president-in" = ["YES", "NO"]
 "https://manifold.markets/LivInTheLookingGlass/will-joe-biden-seek-a-second-term-i" = ["YES", "NO"]
 
-# [GROUPS.Putin2023] # Leader and president, Leader and not president, dead, other
-# "https://manifold.markets/ahalekelly/will-vladimir-putin-still-be-the-le" = ["YES", "YES", "NO", "NO"]
-# "https://manifold.markets/njmkw/if-ukraine-recaptures-cherson-in-20-abc72a4594fc" = ["YES", "YES", "NO", "NO"]
-# "https://manifold.markets/ACXBot/1-will-vladimir-putin-be-president" = ["YES", "NO", "NO", "NO"]
-# "https://manifold.markets/Bot/will-putin-be-leader-of-russia-but" = ["NO", "YES", "NO", "NO"]
-# "https://manifold.markets/Ibozz91/will-vladimir-putin-die-in-any-way" = ["NO", "NO", "YES", "NO"]
-
 [GROUPS.BidenImpeached]
 "https://manifold.markets/kolotom99/american-politics-2023-joe-biden-is" = ["NO", "YES", "YES"]
 "https://manifold.markets/Gigacasting/will-biden-be-impeached-in-2023" = ["YES", "NO", "NO"]
@@ -51,14 +44,6 @@ USERNAME = "Bot"
 "https://manifold.markets/jack/will-hilary-clinton-be-the-2024-dem" = ["NO", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO"]
 
 "https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "YES", "NO", "NO", "YES", "YES", "YES", "YES"]
-
-# [GROUPS."Democratic Nominee"] # Biden, Harris, Warren, Newsom, Buttigieg, Other
-# "https://manifold.markets/NathanpmYoung/will-biden-be-the-2024-democratic-n" =    ["YES", "NO", "NO", "NO", "NO"]
-# "https://manifold.markets/MarketManagerBot/will-kamala-harris-be-the-democrati" = ["NO", "YES", "NO", "NO", "NO"]
-# "https://manifold.markets/MarketManagerBot/will-gavin-newsom-be-the-democratic" = ["NO", "NO", "YES", "NO", "NO"]
-# "https://manifold.markets/JamesGrugett/will-pete-buttigieg-be-the-2024-dem" =     ["NO", "NO", "NO", "YES", "NO"]
-
-# "https://manifold.markets/Charlie/will-someone-other-than-biden-harri" = ["NO", "NO", "NO", "NO", "YES"]
 
 [GROUPS."Republican Nominee"] # DeSantis, Trump, Pence, Haley, Pompeo, Youngkin, Other
 "https://manifold.markets/SG/will-ron-desantis-be-the-2024-repub" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO"]
@@ -105,10 +90,6 @@ USERNAME = "Bot"
 "https://manifold.markets/kolotom99/will-a-nuclear-weapon-be-detonated-41dfff460cab" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 "https://manifold.markets/ACXBot/8-will-a-nuclear-weapon-be-detonate" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 
-# [GROUPS."Russia Mobilisation"]
-# "https://manifold.markets/Nostradamnedus/will-russia-begin-a-new-wave-of-mob" = ["YES", "NO", "NO"]
-# "https://manifold.markets/kolotom99/will-russia-begin-a-new-wave-of-mob-bb11ce38d81f" = ["YES", "YES", "NO"]
-
 [GROUPS."Trump Indictment"] # (and arrested, and flees, and not other) in Jan, in Feb, in March, in 2023 bar Jan/Feb/March, none
 "https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim" = ["YES", "NO", "NO", "NO",   "YES", "NO", "NO","NO",   "YES", "NO", "NO","NO",   "NO"]
 "https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim-46f07e93f72b" = ["YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "NO"]
@@ -120,10 +101,6 @@ USERNAME = "Bot"
 "https://manifold.markets/Bot/will-trump-be-indicted-but-not-arre" = ["NO", "NO", "NO", "NO",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
 
 "https://manifold.markets/Dustin/will-donald-trump-be-arrested-befor" = ["YES", "YES", "YES", "YES",    "NO", "NO", "NO", "NO",     "NO", "NO", "NO", "NO",     "NO"]
-
-[GROUPS."Amazon Layoffs"] # [9, 11), >=11, none
-"https://manifold.markets/firstuserhere/will-amazon-lay-of-9k-or-more-peopl" = ["YES", "YES", "NO"]
-"https://manifold.markets/firstuserhere/will-amazon-lay-off-11k-or-more-peo" = ["NO", "YES", "NO"]
 
 [GROUPS."Costco Dog and Soda"]
 "https://manifold.markets/AmmonLam/will-costcos-in-us-raise-the-price-b47abff49147" = ["YES", "NO", "NO", "NO", "NO"]
@@ -199,17 +176,6 @@ USERNAME = "Bot"
 "https://manifold.markets/BRTD/will-mike-pence-run-for-president-i-fba3872c8e95" = ["YES", "NO"]
 "https://manifold.markets/kolotom99/american-politics-2023-mike-pence-r" = ["YES", "NO"]
 
-# [GROUPS."N.C. Young misresolution"]
-# "https://manifold.markets/NcyRocks/will-anyone-successfully-contest-on-8245fe15603f" = ["YES", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO"]
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol"              = ["ZERO", "YES", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO"]
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-90139aa6baf6" = ["ZERO", "ZERO", "YES", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-c30dc32347ce" = ["ZERO", "ZERO", "ZERO", "YES", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-db997bee7205" = ["ZERO", "ZERO", "ZERO", "ZERO", "YES", "ZERO", "ZERO", "ZERO", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-7a110776eb43" = ["ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "YES", "ZERO", "ZERO", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-02b56f0ed176" = ["ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "YES", "ZERO", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-contest-one-of-my-resol-b96380babce9" = ["ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "ZERO", "YES", "ZERO"] 
-# "https://manifold.markets/NcyRocks/will-anyone-successfully-contest-on-572e14fcecea" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"] 
-
 [GROUPS."Abbot Runs 2024"]
 "https://manifold.markets/BTE/will-greg-abbott-seek-the-gop-nomin" = ["YES", "NO"]
 "https://manifold.markets/NcyRocks/will-greg-abbott-run-for-president" = ["YES", "NO"]
@@ -241,11 +207,6 @@ USERNAME = "Bot"
 [GROUPS."Life Expectancy"]
 "https://manifold.markets/jonsimon/will-the-life-expectancy-in-any-cou" = ["YES", "NO", "NO"]
 "https://manifold.markets/jonsimon/will-life-expectancy-in-any-country" = ["YES", "YES", "NO"]
-
-# [GROUPS."FTX US Recovery"]
-# # "https://manifold.markets/AmmonLam/what-percent-of-the-deposits-will-f" = ["YES", "NO"]
-# "https://manifold.markets/NathanpmYoung/what-of-their-deposits-will-the-typ" = ["YES", "NO"]
-# "https://manifold.markets/Gigacasting/ftx-us-recovery" = ["YES", "NO"]
 
 # Wait until Feb 1
 [GROUPS."Twitter CEO"] #Steps down by in 2023 for twitter, not twitter but tesla/spacex, doesn't step down for anything
@@ -305,10 +266,6 @@ USERNAME = "Bot"
 "https://manifold.markets/Heaffey/will-ukraine-have-control-over-crim" = ["YES", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-ukraine-regain-control-over-cr" = ["YES", "YES", "NO"]
 
-# [GROUPS."Kerch Strait Bridge"]
-# "https://manifold.markets/MetaculusBot/will-ukraine-sever-the-land-bridge" = ["YES", "NO", "NO"]  
-# "https://manifold.markets/Aurelius/will-the-kerch-strait-bridge-bridge" = ["YES", "YES", "NO"]
-
 [GROUPS."Harry Meghan Divorce"]
 "https://manifold.markets/AngolaMaldives/will-prince-harry-and-meghan-divorc" = ["YES", "NO", "NO"]
 "https://manifold.markets/Nostradamnedus/will-harry-and-meghan-divorce-by-20" = ["YES", "NO", "NO"]
@@ -324,10 +281,6 @@ USERNAME = "Bot"
 "https://manifold.markets/kolotom99/2023-will-bitcoin-reach-50000" = ["YES", "YES", "NO", "NO", "NO"]
 "zhttps://manifold.markets/kolotom99/2023-will-bitcoin-reach-60000" = ["YES", "NO", "NO", "NO", "NO"]
 # "https://manifold.markets/Gigacasting/will-bitcoin-go-above-30k-for-at-le"
-
-# [GROUPS."Destiny Subs end of Feb"]
-# "https://manifold.markets/johnleoks/will-destiny-have-630k-subs-by-the" = ["YES", "YES", "NO"]
-# "https://manifold.markets/Simon1551/will-destiny-reach-650k-subscribers" = ["YES", "NO", "NO"]
 
 [GROUPS."Destiny Subs end of Year"]
 "https://manifold.markets/MagniorBjornsson/will-destiny-reach-1000000-subscrib" = ["YES", "NO"]
@@ -367,9 +320,6 @@ USERNAME = "Bot"
 "https://manifold.markets/Ines/will-twitter-have-fewer-active-user" = ["NO", "YES"]
 "https://manifold.markets/SneakySly/will-twitter-have-more-daily-active" = ["YES", "NO"]
 
-# [GROUPS."EA Scandal"]
-
-
 [GROUPS."Tate"]
 "https://manifold.markets/NightHawk_0/will-andrew-tate-be-found-guilty-of-10917660fc94" = ["YES", "YES", "NO"]
 "https://manifold.markets/memestiny/will-andrew-tate-be-found-guilty-of" = ["YES", "NO", "NO"]
@@ -381,10 +331,6 @@ USERNAME = "Bot"
 [GROUPS."Musk Crypto"]
 "https://manifold.markets/Predictor/will-twitter-accept-dogecoin-doge-a" = ["YES", "NO", "NO"]
 "https://manifold.markets/ACXBot/38-will-any-faang-or-musk-company-a" = ["YES", "YES", "NO"]
-
-# [GROUPS."Eth Feb 28"]
-# "https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1300-c99a924f8715" = ["YES", "YES", "NO"]
-# "https://manifold.markets/MarcusAbramovitch/will-ethereums-price-be-above-1400" = ["YES", "NO", "NO"]
 
 [GROUPS."Binance"]
 "https://manifold.markets/tofu/will-binance-becomes-insolventdecla" = ["YES", "NO", "NO"]
@@ -417,10 +363,6 @@ USERNAME = "Bot"
 "https://manifold.markets/NoaNabeshima/if-prediction-markets-become-mostly" = ["NO", "YES", "NO", "NO"]
 "https://manifold.markets/NoaNabeshima/conditional-on-prediction-markets-b" = ["NO", "NO", "YES", "NO"]
 
-# [GROUPS."Russian Troop Loss"]
-# "https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more" = ["YES", "NO", "NO"]
-# "https://manifold.markets/itsTomekK/february-2023-will-russia-lose-more-dbdcf46d24d3" = ["YES", "YES", "NO"]
-
 [GROUPS."Carson State Entity"]
 "https://manifold.markets/CarsonGale/will-a-us-state-government-entity-c" = ["YES", "YES", "NO"]
 "https://manifold.markets/CarsonGale/will-a-california-state-entity-crea" = ["YES", "NO", "NO"]
@@ -446,23 +388,14 @@ USERNAME = "Bot"
 "https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20" = ["YES", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-lex-fridman-interview-ai-by-20-92f297e2645e" = ["YES", "YES", "NO"]
 
-[GROUPS."Fed Funds Rate"]
-"https://manifold.markets/Gigacasting/will-the-fed-raise-benchmark-rates-1102ff6b1a79" = ["YES", "YES", "NO"]
-"https://manifold.markets/jack/will-the-fed-raise-the-fed-funds-ra-b7103e6f1fbf" = ["YES", "YES", "NO"]
-"https://manifold.markets/jack/will-the-fed-raise-the-fed-funds-ra-9a9982dba5ce" = ["YES", "NO", "NO"]
-
-
-# [GROUPS."China Invasion"] # Invades in 2023, not in 2023 but in 2024, not in 2023/2024 before 2030, after 2030/never
-# "https://manifold.markets/mrb/will-china-invade-taiwan-before-the" = ["YES", "NO", "NO", "NO"]
-# "https://manifold.markets/ConnorTabarrk/will-china-launch-a-bootsonthegroun-45e8ae2c7581" = ["YES", "NO", "NO", "NO"]
-# "https://manifold.markets/ACXBot/10-will-china-launch-a-fullscale-in" = ["YES", "NO", "NO", "NO"]
-# "https://manifold.markets/a/china-will-not-launch-a-fullscale-i" = ["NO", "YES", "YES", "YES"]
-
-# "https://manifold.markets/Paul/will-china-invade-taiwan-in-2024" = ["NO", "YES", "NO", "NO"]
-# "https://manifold.markets/dreev/will-china-invade-taiwan-by-the-end" = ["YES", "YES", "NO", "NO"]
-
-# "https://manifold.markets/MetaculusBot/will-china-launch-a-fullscale-invas" = ["YES", "YES", "YES", "NO"]
-
 [GROUPS."China ARMS"]
 "https://manifold.markets/jack/will-china-provide-weapons-to-russi" = ["YES", "NO"]
 "https://manifold.markets/footgun/will-china-supply-arms-to-russia-in" = ["YES", "NO"]
+
+[GROUPS."50%"]
+"https://manifold.markets/Conflux/will-the-average-probability-of-thi" = ["YES", "NO"]
+"https://manifold.markets/Mira/will-the-market-resolve-yes" = ["YES", "NO"]
+
+[GROUPS."Likes Market"]
+"https://manifold.markets/FranklinBaldo/this-is-market-a-will-it-have-more" = ["YES", "NO"]
+"https://manifold.markets/FranklinBaldo/this-is-market-b-will-it-have-more" = ["NO", "YES"]
