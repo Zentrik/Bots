@@ -1,6 +1,9 @@
 APIKEY = "057fa467-501a-47b8-9b23-36041d1a8388"
 USERNAME = "Bot"
 
+# APIKEY = "218fc836-c568-4e88-b12a-eaef0f538431"
+# USERNAME = "NeonNuke"
+
 [GROUPS."Isaac Trustworthiness"] # in Jan, not in Jan, none
 "https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO", "NO"]
 "https://manifold.markets/Courtney/isaacking-and-destiny-together-mani-42332c90e971" = ["YES", "NO", "NO"]

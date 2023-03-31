@@ -315,10 +315,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         println()
     end
 
-    if profit <= .05 * length(plannedBets)
-        return false
-    end
-
     bindingConstraint = false # whether we would bet more if the maxBetAmount was larger
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
@@ -365,10 +361,18 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         return false
     end
 
+    if profit <= .05 * length(plannedBets)
+        if length(plannedBets) > 0
+            println("Insufficient Profit $profit for $(length(plannedBets)) bets")
+        end
+        return false
+    end
+
     if !printedGroupName
         printstyled("=== $(group.name) ===\n", color=:bold)
         printedGroupName = true
     end
+
     printstyled("Profits:         $profit\n", color=:yellow)
 
     if Arguments.confirmBets
@@ -389,31 +393,31 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                 if ohno
                     rerun = true
-
-                    if !isnothing(executedBet.fills[1].matchedBetId)
-
-                        limitOrder = getBet(executedBet.fills.matchedBetId)
-
-                        sharesLeft = 0.
-                        if limitOrder.outcome == "NO"
-                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
-                        elseif limitOrder.outcome == "YES"
-                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
-                        end
-
-                        MarketData[slug].limitOrders[executedBet.outcome] = Dict(limitOrder.limitProb => [limitOrder.orderAmount - limitOrder.amount, shares])
-
-                        if executedBet.outcome == "YES"
-                            MarketData[slug].sortedLimitProbs = Dict(:YES=>[limitOrder.limitProb], :NO=>[])
-                        elseif executedBet.outcome == "NO"
-                            MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
-                        end
-                    end
                 end
 
                 # botBalance -= executedBet.amount
 
                 updateShares!(MarketData[slug], executedBet)
+
+                if !isnothing(executedBet.fills[1].matchedBetId)
+
+                    limitOrder = getBet(executedBet.fills[1].matchedBetId)
+
+                    sharesLeft = 0.
+                    if limitOrder.outcome == "NO"
+                        sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
+                    elseif limitOrder.outcome == "YES"
+                        sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
+                    end
+
+                    MarketData[slug].limitOrders[executedBet.outcome] = Dict(limitOrder.limitProb => [limitOrder.orderAmount - limitOrder.amount, shares])
+
+                    if executedBet.outcome == "YES"
+                        MarketData[slug].sortedLimitProbs = Dict(:YES=>[limitOrder.limitProb], :NO=>[])
+                    elseif executedBet.outcome == "NO"
+                        MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
+                    end
+                end
             catch err
                 bt = catch_backtrace()
                 println()
@@ -445,6 +449,10 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
                     runs += 1
                 end
                 push!(seenGroups, GroupData.contractIdToGroupIndex[bet.contractId])
+
+                for slug in GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]].slugs
+                    MarketData[slug].limitOrders = Dict{String, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
+                end
             end
         end
     end
@@ -560,6 +568,7 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
         
         while rerun# && runs <= 5
             rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
+            redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
         end
     end
 
@@ -587,6 +596,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     lastBetId = getBets(limit=1)[1].id
     markets = getMarkets(getSlugs(groups))
     USERID = getUserByUsername(USERNAME).id
+    printstyled("Fetching Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     fetchMyShares!(marketDataBySlug, markets, USERID)
     printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
@@ -606,6 +616,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
             
             while rerun# && runs <= 5
                 rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
+                redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
             end
         end
     end
@@ -615,7 +626,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
 
         lastBetId = arbitrage(groupData, botData, marketDataBySlug, lastBetId, arguments)
-        redeemShares!(MarketData) # just needs to be run periodically to prevent overflow
+        redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
 
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
