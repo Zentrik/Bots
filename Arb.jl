@@ -28,7 +28,7 @@ end
 
 @kwdef mutable struct MarketData 
     Shares::Dict{Symbol, Float64} = Dict{Symbol, Float64}(:NO => 0., :YES => 0.)
-    limitOrders::Dict{String, Dict{Float64, Vector{Float64}}} = Dict{String, Dict{Float64, Vector{Float64}}}()
+    limitOrders::Dict{Symbol, Dict{Float64, Vector{Float64}}} = Dict{Symbol, Dict{Float64, Vector{Float64}}}()
     sortedLimitProbs::Dict{Symbol, Vector{Float64}} = Dict{Symbol, Vector{Float64}}(:NO => [], :YES => [])
 end
 
@@ -116,7 +116,7 @@ function f!(betAmount, group, markets, MarketData, currentNoShares, currentYesSh
             shares = 0.
             shares, newProb[j] = betToShares(market.p::Float64, pool, market.probability::Float64, MarketData[slug].limitOrders, MarketData[slug].sortedLimitProbs, betAmount[i])
 
-            # fees += 0.1
+            fees += 0.05
             if betAmount[i] >= 1.
                 yesShares[j] += shares
             elseif betAmount[i] <= -1.
@@ -205,7 +205,7 @@ function getMarketsAndBalance!(group, USERNAME)
 
         end
 
-        myBalance = getUserByUsername(USERNAME).balance
+        myBalance = getUserByUsername(USERNAME).balance::Float64
     end
 
     return (markets=markets, myBalance=myBalance)
@@ -315,6 +315,10 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         println()
     end
 
+    if profit ≤ 0
+        return false
+    end
+
     bindingConstraint = false # whether we would bet more if the maxBetAmount was larger
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
@@ -361,19 +365,12 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         return false
     end
 
-    if profit <= .05 * length(plannedBets)
-        if length(plannedBets) > 0
-            println("Insufficient Profit $profit for $(length(plannedBets)) bets")
-        end
-        return false
-    end
-
     if !printedGroupName
         printstyled("=== $(group.name) ===\n", color=:bold)
         printedGroupName = true
     end
 
-    printstyled("Profits:         $profit\n", color=:yellow)
+    printstyled("Profits:         $(profit + .05 * length(plannedBets))\n", color=:yellow) # no more fee, but we still want to use fee in optimisation
 
     if Arguments.confirmBets
         println("Proceed? (y/n)") 
@@ -391,11 +388,11 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                 slug =  urlToSlug(bet.market.url)
 
+                # botBalance -= executedBet.amount
+
                 if ohno
                     rerun = true
                 end
-
-                # botBalance -= executedBet.amount
 
                 updateShares!(MarketData[slug], executedBet)
 
@@ -403,14 +400,17 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                     limitOrder = getBet(executedBet.fills[1].matchedBetId)
 
+                    amountLeft = 0.
                     sharesLeft = 0.
                     if limitOrder.outcome == "NO"
                         sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
+                        amountLeft = sharesLeft * limitOrder.limitProb
                     elseif limitOrder.outcome == "YES"
                         sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
+                        amountLeft = sharesLeft * (1 - limitOrder.limitProb)
                     end
 
-                    MarketData[slug].limitOrders[executedBet.outcome] = Dict(limitOrder.limitProb => [limitOrder.orderAmount - limitOrder.amount, shares])
+                    MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(limitOrder.limitProb => [amountLeft, sharesLeft])
 
                     if executedBet.outcome == "YES"
                         MarketData[slug].sortedLimitProbs = Dict(:YES=>[limitOrder.limitProb], :NO=>[])
@@ -427,7 +427,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         end
     end
 
-    return rerun * Arguments.live
+    return (rerun * Arguments.live)::Bool
 end
 
 function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
@@ -451,7 +451,8 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
                 push!(seenGroups, GroupData.contractIdToGroupIndex[bet.contractId])
 
                 for slug in GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]].slugs
-                    MarketData[slug].limitOrders = Dict{String, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
+                    MarketData[slug].limitOrders = Dict{Symbol, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
+                    MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[])
                 end
             end
         end
@@ -485,8 +486,8 @@ end
 function readData()
     data = TOML.parsefile("$(@__DIR__)/Arb.toml")
     GROUPS::Dict{String, Dict{String, Vector{String}}} = data["GROUPS"]
-    APIKEY = data["APIKEY"]
-    USERNAME = data["USERNAME"]
+    APIKEY::String = data["APIKEY"]
+    USERNAME::String = data["USERNAME"]
 
     slugs = getSlugs(GROUPS)
     if !allunique(slugs)
@@ -513,7 +514,7 @@ function readData()
 end
 
 function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
-    GROUPS, APIKEY, USERNAME = readData()
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, USERNAME = readData()
 
     groups = Group.(keys(GROUPS), values(GROUPS))
 
@@ -536,7 +537,7 @@ function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
 end
 
 function test(groupNames = nothing; live=false, confirmBets=true, printDebug=true)
-    GROUPS, APIKEY, USERNAME = readData()  
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)
@@ -582,7 +583,7 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
-    GROUPS, APIKEY, USERNAME = readData()  
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)

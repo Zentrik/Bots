@@ -93,17 +93,22 @@ USERNAME = "Bot"
 "https://manifold.markets/kolotom99/will-a-nuclear-weapon-be-detonated-41dfff460cab" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 "https://manifold.markets/ACXBot/8-will-a-nuclear-weapon-be-detonate" = ["YES", "YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 
-[GROUPS."Trump Indictment"] # (and arrested, and flees, and not other) in Jan, in Feb, in March, in 2023 bar Jan/Feb/March, none
-"https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim" = ["YES", "NO", "NO", "NO",   "YES", "NO", "NO","NO",   "YES", "NO", "NO","NO",   "NO"]
-"https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim-46f07e93f72b" = ["YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "NO"]
-"https://manifold.markets/Gigacasting/will-trump-be-indicted-by-march-31" = ["YES", "YES", "YES", "NO",    "YES", "YES", "YES", "NO",    "YES", "YES", "YES", "NO",    "NO"]
-"https://manifold.markets/ACXBot/23-will-donald-trump-get-indicted-o" = ["YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
-"https://manifold.markets/LivInTheLookingGlass/will-donald-trump-be-indicted-for-a-bd5ee56971ea" = ["YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
+# [GROUPS."Trump Indictment"] # (and arrested, and flees, and not other) in Jan, in Feb, in March, in 2023 bar Jan/Feb/March, none
+# "https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim" = ["YES", "NO", "NO", "NO",   "YES", "NO", "NO","NO",   "YES", "NO", "NO","NO",   "NO"]
+# "https://manifold.markets/belikewater/will-trump-be-indicted-for-any-crim-46f07e93f72b" = ["YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "YES", "YES", "NO", "NO",   "NO"]
+# "https://manifold.markets/Gigacasting/will-trump-be-indicted-by-march-31" = ["YES", "YES", "YES", "NO",    "YES", "YES", "YES", "NO",    "YES", "YES", "YES", "NO",    "NO"]
+# "https://manifold.markets/ACXBot/23-will-donald-trump-get-indicted-o" = ["YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
+# "https://manifold.markets/LivInTheLookingGlass/will-donald-trump-be-indicted-for-a-bd5ee56971ea" = ["YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
 
-"https://manifold.markets/CromlynGames/will-donald-trump-be-indicted-but-f" = ["NO", "NO", "NO", "NO",    "YES", "YES", "YES", "YES",    "NO", "NO", "NO", "NO",    "NO"]
-"https://manifold.markets/Bot/will-trump-be-indicted-but-not-arre" = ["NO", "NO", "NO", "NO",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
+# "https://manifold.markets/CromlynGames/will-donald-trump-be-indicted-but-f" = ["NO", "NO", "NO", "NO",    "YES", "YES", "YES", "YES",    "NO", "NO", "NO", "NO",    "NO"]
+# "https://manifold.markets/Bot/will-trump-be-indicted-but-not-arre" = ["NO", "NO", "NO", "NO",    "YES", "YES", "YES", "YES",    "YES", "YES", "YES", "YES",    "NO"]
 
-"https://manifold.markets/Dustin/will-donald-trump-be-arrested-befor" = ["YES", "YES", "YES", "YES",    "NO", "NO", "NO", "NO",     "NO", "NO", "NO", "NO",     "NO"]
+# "https://manifold.markets/Dustin/will-donald-trump-be-arrested-befor" = ["YES", "YES", "YES", "YES",    "NO", "NO", "NO", "NO",     "NO", "NO", "NO", "NO",     "NO"]
+
+[GROUPS."Trump Indictment"]
+"https://manifold.markets/ACXBot/23-will-donald-trump-get-indicted-o" = ["YES", "YES", "NO"]
+"https://manifold.markets/Bot/will-trump-be-indicted-but-not-arre" = ["NO", "YES", "NO"]
+"https://manifold.markets/Dustin/will-donald-trump-be-arrested-befor" = ["YES", "NO", "NO"]
 
 [GROUPS."Costco Dog and Soda"]
 "https://manifold.markets/AmmonLam/will-costcos-in-us-raise-the-price-b47abff49147" = ["YES", "NO", "NO", "NO", "NO"]
