@@ -386,7 +386,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             @async try
                 executedBet, ohno = execute(bet, BotData.APIKEY)
 
-                slug =  urlToSlug(bet.market.url)
+                slug = urlToSlug(bet.market.url)
 
                 # botBalance -= executedBet.amount
 
@@ -396,9 +396,9 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                 updateShares!(MarketData[slug], executedBet)
 
-                if !isnothing(executedBet.fills[1].matchedBetId)
+                if !isnothing(executedBet.fills[end].matchedBetId)
 
-                    limitOrder = getBet(executedBet.fills[1].matchedBetId)
+                    limitOrder = getBet(executedBet.fills[end].matchedBetId)
 
                     amountLeft = 0.
                     sharesLeft = 0.
