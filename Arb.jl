@@ -149,14 +149,15 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=4.)
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3.)
+    sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
-    nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
+    for solution in (sol, sol2)
+        nonZeroIndices = findall(!iszero, solution.u::Vector{Float64})
 
-    for solution in (sol,)
         for indices in powerset(nonZeroIndices)
             betAmount::Vector{Float64} = copy(solution.u)
             betAmount[indices] .= 0
@@ -226,7 +227,7 @@ function getLiveBets(lastBetId)
     lastBetFetched = nothing
 
     while !gotAllBets && numberOfBetsFetched <= 100
-        toFetch = 3+rand(0:5)
+        toFetch = 5+rand(0:5)
         tmp = getBets(limit=toFetch, before=lastBetFetched)
 
         for (i, bet) in enumerate(tmp) # probably faster to go in reverse

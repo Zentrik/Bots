@@ -295,10 +295,6 @@ USERNAME = "Bot"
 "https://manifold.markets/Fyterian/will-destiny-reach-1m-subscribers-o" = ["YES", "NO"]
 "https://manifold.markets/JoJoMango/will-destiny-get-more-then-1-millio" = ["YES", "NO"]
 
-[GROUPS."Destiny Subs 700k"]
-"https://manifold.markets/youlumpekum/will-destiny-reach-700k-subscribers" = ["YES", "NO", "NO"]
-"https://manifold.markets/DesTiny/will-destiny-have-700k-subs-by-apri" = ["YES", "YES", "NO"]
-
 [GROUPS."McCarthy"]
 "https://manifold.markets/kolotom99/american-politics-2023-kevin-mccart" = ["YES", "YES", "NO"]
 "https://manifold.markets/kolotom99/will-kevin-mccarthy-stay-the-speake" = ["YES", "YES", "NO"] 
@@ -309,10 +305,6 @@ USERNAME = "Bot"
 "https://manifold.markets/LivInTheLookingGlass/before-may-will-the-house-hold-a-vo" = ["YES", "YES", "NO", "NO"]
 "https://manifold.markets/octothorpe/during-the-118th-congress-will-the" = ["YES", "YES", "YES", "NO"]
 
-[GROUPS."DAUs April 1st"]
-"https://manifold.markets/JamesGrugett/will-manifold-reach-2400-dau-7d-ave" = ["YES", "YES", "NO"]
-"https://manifold.markets/JamesGrugett/will-manifold-reach-10000-daily-act" = ["NO", "YES", "NO"]
-
 [GROUPS."DAUs EOY"]
 "https://manifold.markets/kolotom99/will-manifold-hit-2022-active-daily-66e8cb67108c" = ["YES", "YES", "YES", "YES", "YES", "YES", "NO"]
 "https://manifold.markets/IsaacKing/will-manifold-break-its-current-rec" =              ["YES", "YES", "YES", "YES", "YES", "NO", "NO"]
@@ -321,7 +313,6 @@ USERNAME = "Bot"
 "https://manifold.markets/kolotom99/will-manifold-hit-10000-active-user-1094099de567" = ["YES", "YES", "YES", "NO", "NO", "NO", "NO"]
 "https://manifold.markets/FRCassarino/will-manifold-average-10k-daily-act" = ["YES", "YES", "NO", "NO", "NO", "NO", "NO"]
 "https://manifold.markets/kolotom99/will-manifold-hit-25000-active-user" = ["YES", "NO", "NO", "NO", "NO", "NO", "NO"]
-
 
 [GROUPS."Twitter mDAUs"]
 "https://manifold.markets/ACXBot/29-will-twitters-average-monetizabl" = ["YES", "NO"]
@@ -399,11 +390,3 @@ USERNAME = "Bot"
 [GROUPS."China ARMS"]
 "https://manifold.markets/jack/will-china-provide-weapons-to-russi" = ["YES", "NO"]
 "https://manifold.markets/footgun/will-china-supply-arms-to-russia-in" = ["YES", "NO"]
-
-[GROUPS."50%"]
-"https://manifold.markets/Conflux/will-the-average-probability-of-thi" = ["YES", "NO"]
-"https://manifold.markets/Mira/will-the-market-resolve-yes" = ["YES", "NO"]
-
-[GROUPS."Likes Market"]
-"https://manifold.markets/FranklinBaldo/this-is-market-a-will-it-have-more" = ["YES", "NO"]
-"https://manifold.markets/FranklinBaldo/this-is-market-b-will-it-have-more" = ["NO", "YES"]
