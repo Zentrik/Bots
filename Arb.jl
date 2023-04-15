@@ -24,6 +24,7 @@ struct PlannedBet
     shares::Float64
     outcome::String
     market::Market
+    redeemedMana::Float64
 end
 
 @kwdef mutable struct MarketData 
@@ -49,11 +50,6 @@ end
     live=false
     confirmBets=true
     printDebug=true
-end
-
-function Base.show(io::IO, plannedBet::PlannedBet)
-    printstyled(io, "\e]8;;$(plannedBet.market.url)\e\\$(plannedBet.market.question)\e]8;;\e\\\n", color=:green) # hyperlink
-    print(io, "Buy $(plannedBet.shares) $(plannedBet.outcome) shares for $(plannedBet.amount)")
 end
 
 function execute(bet, APIKEY)
@@ -144,29 +140,50 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
     profitF = OptimizationFunction((betAmount, _) -> -minimum( f!(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent).profitsByEvent ))
 
     x0 = repeat([0.], length(bettableSlugsIndex))
-    lb = repeat([-maxBetAmount], length(bettableSlugsIndex))
-    ub = repeat([maxBetAmount], length(bettableSlugsIndex))
+    # lb = -[maxBetAmount + min(MarketData[slug].Shares[:YES] / (1 - markets[slug].probability::Float64), 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([-maxBetAmount], length(bettableSlugsIndex))
+    # ub = [maxBetAmount + min(MarketData[slug].Shares[:NO] / markets[slug].probability::Float64, 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([maxBetAmount], length(bettableSlugsIndex))
+
+    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - markets[slug].probability::Float64), MarketData[slug].Shares[:NO] / markets[slug].probability::Float64), group.slugs[bettableSlugsIndex])
+    ub = [maxBetAmount + min(redeemManaHack, maxBetAmount, 100.) for slug in group.slugs[bettableSlugsIndex]]
+    lb = -ub
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
     sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3.)
-    sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
-    for solution in (sol, sol2)
-        nonZeroIndices = findall(!iszero, solution.u::Vector{Float64})
+
+    nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
+
+    for indices in powerset(nonZeroIndices)
+        betAmount::Vector{Float64} = copy(sol.u)
+        betAmount[indices] .= 0
+
+        riskFreeProfit = f(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
+
+        if riskFreeProfit > maxRiskFreeProfit
+            maxRiskFreeProfit = riskFreeProfit
+            bestSolution .= betAmount
+        end
+    end
+    
+
+    if bestSolution == repeat([0.], length(bettableSlugsIndex))
+        sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
+
+        nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
 
         for indices in powerset(nonZeroIndices)
-            betAmount::Vector{Float64} = copy(solution.u)
+            betAmount::Vector{Float64} = copy(sol2.u)
             betAmount[indices] .= 0
 
             riskFreeProfit = f(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
             if riskFreeProfit > maxRiskFreeProfit
                 maxRiskFreeProfit = riskFreeProfit
-                bestSolution = betAmount
+                bestSolution .= betAmount
             end
         end
     end
@@ -183,6 +200,7 @@ function getMarkets(slugs)
             bt = catch_backtrace()
             println()
             showerror(stderr, err, bt)
+            throw(err)
         end
     end
 
@@ -251,9 +269,11 @@ function getLiveBets(lastBetId)
 end
 
 function arbitrageGroup(group, BotData, MarketData, Arguments)
+    rerun = :Success
+
     markets, botBalance = getMarketsAndBalance!(group, BotData.USERNAME)
 
-    maxBetAmount = botBalance / (3 + 1.5*group.noMarkets)
+    maxBetAmount = botBalance / (2 + 1.5*group.noMarkets)
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
     allMarketsClosing = true
@@ -265,7 +285,9 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     if allMarketsClosing
         printstyled("$(group.name) all markets closed at $(Dates.format(now(), "HH:MM:SS.sss"))\n", bold=true, underline=true)
-        return false
+
+        rerun = :Success
+        return rerun
     end
 
     plannedBets = PlannedBet[]
@@ -316,11 +338,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         println()
     end
 
-    if profit ≤ 0
-        return false
-    end
-
-    bindingConstraint = false # whether we would bet more if the maxBetAmount was larger
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
         slug = group.slugs[j]
@@ -328,26 +345,55 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         if isapprox(amount, 0., atol=1e-6)
             continue
         elseif abs(amount) >= 1.
-            bet = PlannedBet(abs(amount), newYesShares[j] + newNoShares[j], amount > 0. ? "YES" : "NO", markets[slug]::Market)
-            push!(plannedBets, bet)
-            
-            if abs(amount) >= .98 * maxBetAmount
-                printstyled("Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount\n", color=:orange)
-                bindingConstraint = true
+            outcome = amount > 0. ? "YES" : "NO"
+            shares = newYesShares[j] + newNoShares[j]
+            redeemedMana = 0.
+            if outcome == "YES"
+                redeemedMana = min(MarketData[slug].Shares[:NO], shares)
+            elseif outcome == "NO"
+                redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
-            if abs(amount) ≈ 1
-                printstyled("Bet size is $(abs(amount))\n", color=:orange)
-                bindingConstraint = true
-            end
+            bet = PlannedBet(abs(amount), shares, outcome, markets[slug]::Market, redeemedMana)
+            push!(plannedBets, bet)
         else
             if !printedGroupName
                 printstyled("=== $(group.name) ===\n", color=:bold)
-                printedGroupName = true
+                # printedGroupName = true
+                rerun = :BetMore
             end
             println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
-            return false
-            break
+
+            rerun = :Success
+            return rerun
+        end
+    end
+
+    sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
+
+    if (profit ≤ 0) && !(profit + .05 * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets) > 1.)
+        rerun = :Success
+        return rerun
+    end
+
+    # bindingConstraint = false # whether we would bet more if the maxBetAmount was larger
+
+    newProbBySlug = Dict(group.slugs[j] => newProb[j] for j in bettableSlugsIndex)
+    for (i, bet) in enumerate(plannedBets)
+        amount = betAmounts[i]
+        slug = urlToSlug(bet.market.url)
+        bet = plannedBets[i]
+
+        if abs(amount) >= .98 * maxBetAmount
+            printstyled("Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount\n", color=:orange)
+            # bindingConstraint = true
+            rerun = :BetMore
+        end
+
+        if abs(amount) ≈ 1
+            printstyled("Bet size is $(abs(amount))\n", color=:orange)
+            # bindingConstraint = true
+            rerun = :BetMore
         end
 
         if !printedGroupName
@@ -357,13 +403,14 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
         printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
         println("Prior probs:     $(markets[slug].probability * 100)%")
-        println("Posterior probs: $(newProb[j]*100)%")
-        printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount)\n", color=:green)
+        println("Posterior probs: $(newProbBySlug[slug]*100)%")
+        printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)\n", color=:green)
     end
 
-    if sum(abs.(betAmounts)) >= botBalance - 100
-        println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet")
-        return false
+    if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + botBalance - 100
+        println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets)).")
+        rerun = :Success
+        return rerun
     end
 
     if !printedGroupName
@@ -376,15 +423,16 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     if Arguments.confirmBets
         println("Proceed? (y/n)") 
         if readline() !="y"
-            return false
+            rerun = :Success
+            return rerun
         end
     end
 
-    rerun = bindingConstraint
+    # rerun = bindingConstraint ? :BetMore : :Success
 
     if Arguments.live
-        @sync for bet in plannedBets 
-            @async try
+        @sync try 
+            @async for bet in plannedBets 
                 executedBet, ohno = execute(bet, BotData.APIKEY)
 
                 slug = urlToSlug(bet.market.url)
@@ -392,7 +440,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 # botBalance -= executedBet.amount
 
                 if ohno
-                    rerun = true
+                    rerun = :UnexpectedBet
                 end
 
                 updateShares!(MarketData[slug], executedBet)
@@ -419,16 +467,21 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                         MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
                     end
                 end
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-                throw(err)
             end
-        end
-    end
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
 
-    return (rerun * Arguments.live)::Bool
+            fetchMyShares!(marketDataBySlug, markets, BotData.USERID)
+
+            rerun = :PostFailure
+        end
+
+        return rerun
+    else
+        return :Success
+    end
 end
 
 function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
@@ -440,10 +493,15 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
     for bet in bets
         if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
             if GroupData.contractIdToGroupIndex[bet.contractId] ∉ seenGroups && (isnothing(bet.limitProb) || !(bet.probAfter ≈ bet.probBefore))
-                rerun = true
+                rerun = :FirstRun
                 runs = 0
+                delay = 60
                 
-                while rerun && runs <= 5
+                while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
+                    if rerun == :PostFailure
+                        sleep(delay)
+                        delay *= 5
+                    end 
                     printstyled("Running $(GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]].name)\n", color=:light_cyan)
                     rerun = arbitrageGroup(GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]], BotData, MarketData, Arguments)
 
@@ -565,13 +623,16 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     groupData = GroupData(groups, contractIdSet, contractIdToGroupIndex, contractIdToSlug)
 
     for group in groups
-        rerun = true
-        # runs = 0
+        rerun = :FirstRun
+        runs = 0
         
-        while rerun# && runs <= 5
+        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
             rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
-            redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
+
+            runs += 1
         end
+
+        redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
     end
 
     println("Sleeping")
@@ -613,18 +674,21 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     if !skip
         for group in groups
-            rerun = true
-            # runs = 0
+            rerun = :FirstRun
+            runs = 0
             
-            while rerun# && runs <= 5
+            while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
                 rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
-                redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
+
+                runs += 1
             end
+
+            redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
         end
     end
 
     while true
-        # oldTime = time()
+        lastRunTime = time()
         printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
 
         lastBetId = arbitrage(groupData, botData, marketDataBySlug, lastBetId, arguments)
@@ -633,8 +697,33 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(15 + rand())
+        sleep(max(5, 15 - (time() - lastRunTime)) + rand())
         # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+    end
+end
+
+function retryProd()
+    delay = 60
+    lastRunTime = time()
+
+    try
+        production()
+    catch err
+        bt = catch_backtrace()
+        println()
+        showerror(stderr, err, bt)
+
+        if err isa MethodError || err isa InterruptException
+            throw(err)
+        end
+        
+        if time() - lastRunTime > 3600
+            delay = 60
+        end
+        sleep(delay)
+
+        delay *= 5
+        lastRunTime = time()
     end
 end
 
