@@ -371,7 +371,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
 
-    if (profit ≤ 0) && !(profit + .05 * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets) > 1.)
+    if (profit ≤ 0) && !(profit + .05 * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.)
         rerun = :Success
         return rerun
     end
