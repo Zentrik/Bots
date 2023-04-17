@@ -70,9 +70,13 @@ function execute(bet, APIKEY)
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        printstyled("\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
-        println(response)
-        println(response.fills)
+        io = IOBuffer()
+
+        printstyled(io, "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
+        println(io, response)
+        println(io, response.fills)
+
+        write(stdout, take!(io));
 
         ohno = true
     end
@@ -181,7 +185,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3)
+    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=2)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -192,7 +196,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     betAmount::Vector{Float64} = repeat([0.], length(bettableSlugsIndex))
 
     for indices in powerset(nonZeroIndices)
-        betAmount::Vector{Float64} .= sol.u
+        betAmount::Vector{Float64} .= sol.u::Vector{Float64}
         betAmount[indices] .= 0
 
         riskFreeProfit = f(betAmount, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -210,7 +214,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
         nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
 
         for indices in powerset(nonZeroIndices)
-            betAmount::Vector{Float64} .= sol2.u
+            betAmount::Vector{Float64} .= sol2.u::Vector{Float64}
             betAmount[indices] .= 0
 
             riskFreeProfit = f(betAmount, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
