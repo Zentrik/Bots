@@ -294,7 +294,7 @@ USERNAME = "Bot"
 "https://manifold.markets/Nostradamnedus/will-harry-and-meghan-divorce-by-20" = ["YES", "NO", "NO"]
 "https://manifold.markets/itsTomekK/will-prince-harry-and-meghan-markle" = ["YES", "YES", "NO"]
 
-[GROUPS."Bitcoin drops before 10k"]
+[GROUPS."Ethereum drops before 10k"]
 "https://manifold.markets/Gigacasting/will-ethereum-reach-100-before-it-r" = ["YES", "NO", "NO"]
 "https://manifold.markets/Gigacasting/will-ethereum-reach-1000-before-it" = ["YES", "YES", "NO"]
 
