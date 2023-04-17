@@ -18,19 +18,21 @@ struct Group
         return new(name, slugs, y_matrix, n_matrix, noMarkets)
     end
 end
-
-struct PlannedBet
-    amount::Float64
-    shares::Float64
-    outcome::String
-    market::Market
-    redeemedMana::Float64
-end
-
 @kwdef mutable struct MarketData 
     Shares::Dict{Symbol, Float64} = Dict{Symbol, Float64}(:NO => 0., :YES => 0.)
     limitOrders::Dict{Symbol, Dict{Float64, Vector{Float64}}} = Dict{Symbol, Dict{Float64, Vector{Float64}}}()
     sortedLimitProbs::Dict{Symbol, Vector{Float64}} = Dict{Symbol, Vector{Float64}}(:NO => [], :YES => [])
+
+    probability::Float64 = -1
+    p::Float64 = -1
+    pool::Dict{Symbol, Float64} = Dict{Symbol, Float64}()
+
+    id::String = ""
+    url::String = ""
+    question::String = ""
+
+    isResolved::Bool = false
+    closeTime::Int = -1
 end
 
 @with_kw struct BotData @deftype String
@@ -52,13 +54,23 @@ end
     printDebug=true
 end
 
+struct PlannedBet
+    amount::Float64
+    shares::Float64
+    outcome::String
+    redeemedMana::Float64
+
+    id::String
+    url::String
+    question::String
+end
+
 function execute(bet, APIKEY)
     ohno = false
-    response = createBet(APIKEY, bet.market.id, bet.amount, bet.outcome)
+    response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
     if response.shares ≉ bet.shares
-        printstyled("\e]8;;$(bet.market.url)\e\\$(bet.market.question)\e]8;;\e\\\n", color=:green) # hyperlink
-        println(bet.market.url)
+        printstyled("\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
         println(response)
         println(response.fills)
 
@@ -86,18 +98,18 @@ function redeemShares!(MarketData)
     # @assert mapreduce(slug -> min(noSharesBySlug[slug], yesSharesBySlug[slug]), max, getSlugs(GROUPS)) ≈ 0
 end
 
-function f(betAmount, group, markets, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex)
+function f(betAmount, group, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex)
     A = zeros(size(group.y_matrix)[1])
     B = zeros(size(group.n_matrix)[1])
     profitsByEvent = zeros(size(group.y_matrix)[1])
 
     # newProb = zeros(group.noMarkets) # Makes it obvious which markets we don't bet on. We can print this manually, but this hides errors in fetching market probabilities
-    newProb = [markets[slug].probability::Float64 for slug in group.slugs] # So we return the correct results for markets we don't bet on  and closing soon markets
+    newProb = [MarketData[slug].probability for slug in group.slugs] # So we return the correct results for markets we don't bet on  and closing soon markets
 
-    return f!(betAmount, group, markets, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex, copy(newProb), A, B, profitsByEvent)
+    return f!(betAmount, group, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex, copy(newProb), A, B, profitsByEvent)
 end
 
-function f!(betAmount, group, markets, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent)
+function f!(betAmount, group, MarketData, currentNoShares, currentYesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent)
     noShares = copy(currentNoShares)
     yesShares = copy(currentYesShares)
 
@@ -105,12 +117,11 @@ function f!(betAmount, group, markets, MarketData, currentNoShares, currentYesSh
 
     for (i, j) in enumerate(bettableSlugsIndex)
         slug = group.slugs[j]
-        market = markets[slug]
+        market = MarketData[slug]
 
         if abs(betAmount[i]) >= 1.
-            pool = market.pool
             shares = 0.
-            shares, newProb[j] = betToShares(market.p::Float64, pool, market.probability::Float64, MarketData[slug].limitOrders, MarketData[slug].sortedLimitProbs, betAmount[i])
+            shares, newProb[j] = betToShares(market.p, market.pool, market.probability, market.limitOrders, market.sortedLimitProbs, betAmount[i])
 
             fees += 0.05
             if betAmount[i] >= 1.
@@ -128,7 +139,7 @@ function f!(betAmount, group, markets, MarketData, currentNoShares, currentYesSh
     return (profitsByEvent=profitsByEvent, noShares=noShares, yesShares=yesShares, newProbability=newProb)
 end
 
-function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
+function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     newProb = zeros(group.noMarkets)
     noShares = [MarketData[slug].Shares[:NO] for slug in group.slugs]
     yesShares = [MarketData[slug].Shares[:YES] for slug in group.slugs]
@@ -137,13 +148,13 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
     B = zeros(size(group.n_matrix)[1])
     profitsByEvent = zeros(size(group.y_matrix)[1])
 
-    profitF = OptimizationFunction((betAmount, _) -> -minimum( f!(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent).profitsByEvent ))
+    profitF = OptimizationFunction((betAmount, _) -> -minimum( f!(betAmount, group, MarketData, noShares, yesShares, bettableSlugsIndex, newProb, A, B, profitsByEvent).profitsByEvent ))
 
     x0 = repeat([0.], length(bettableSlugsIndex))
     # lb = -[maxBetAmount + min(MarketData[slug].Shares[:YES] / (1 - markets[slug].probability::Float64), 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([-maxBetAmount], length(bettableSlugsIndex))
     # ub = [maxBetAmount + min(MarketData[slug].Shares[:NO] / markets[slug].probability::Float64, 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([maxBetAmount], length(bettableSlugsIndex))
 
-    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - markets[slug].probability::Float64), MarketData[slug].Shares[:NO] / markets[slug].probability::Float64), group.slugs[bettableSlugsIndex])
+    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
     ub = [maxBetAmount + min(redeemManaHack, maxBetAmount, 100.) for slug in group.slugs[bettableSlugsIndex]]
     lb = -ub
 
@@ -152,7 +163,7 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
     sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3.)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
-    maxRiskFreeProfit = f(bestSolution, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
+    maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
 
     nonZeroIndices = findall(!iszero, sol.u::Vector{Float64})
@@ -161,7 +172,7 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
         betAmount::Vector{Float64} = copy(sol.u)
         betAmount[indices] .= 0
 
-        riskFreeProfit = f(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
+        riskFreeProfit = f(betAmount, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
         if riskFreeProfit > maxRiskFreeProfit
             maxRiskFreeProfit = riskFreeProfit
@@ -179,7 +190,7 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
             betAmount::Vector{Float64} = copy(sol2.u)
             betAmount[indices] .= 0
 
-            riskFreeProfit = f(betAmount, group, markets, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
+            riskFreeProfit = f(betAmount, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
 
             if riskFreeProfit > maxRiskFreeProfit
                 maxRiskFreeProfit = riskFreeProfit
@@ -191,11 +202,19 @@ function optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
     return bestSolution
 end
 
-function getMarkets(slugs)
-    markets = Dict{String, Market}()
+function getMarkets!(MarketData, slugs)
     @sync for slug in slugs
         @async try
-            markets[slug] = getMarketBySlug(slug)
+            market = getMarketBySlug(slug)
+            MarketData[slug].probability = market.probability::Float64
+            MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
+            MarketData[slug].pool = market.pool
+            MarketData[slug].id = market.id
+            MarketData[slug].question = market.question
+            MarketData[slug].url = market.url
+
+            MarketData[slug].isResolved = market.isResolved
+            MarketData[slug].closeTime = market.closeTime
         catch err
             bt = catch_backtrace()
             println()
@@ -203,18 +222,21 @@ function getMarkets(slugs)
             throw(err)
         end
     end
-
-    return markets
 end
 
-function getMarketsAndBalance!(group, USERNAME)
-    markets = Dict{String, Market}()
+function getMarketsAndBalance!(MarketData, group, USERNAME)
     myBalance = 0.
 
     @sync begin 
         for slug in group.slugs
             @async try
-                markets[slug] = getMarketBySlug(slug)
+                market = getMarketBySlug(slug)
+                MarketData[slug].probability = market.probability::Float64
+                MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
+                MarketData[slug].pool = market.pool
+
+                MarketData[slug].isResolved = market.isResolved
+                MarketData[slug].closeTime = market.closeTime
             catch err
                 bt = catch_backtrace()
                 println()
@@ -227,7 +249,7 @@ function getMarketsAndBalance!(group, USERNAME)
         myBalance = getUserByUsername(USERNAME).balance::Float64
     end
 
-    return (markets=markets, myBalance=myBalance)
+    return myBalance
 end
 
 getSlugs(GROUPS::Dict) = mapreduce(x -> urlToSlug.(x), vcat, keys.(values(GROUPS)))
@@ -271,17 +293,19 @@ end
 function arbitrageGroup(group, BotData, MarketData, Arguments)
     rerun = :Success
 
-    markets, botBalance = getMarketsAndBalance!(group, BotData.USERNAME)
+    botBalance = getMarketsAndBalance!(MarketData, group, BotData.USERNAME)
 
     maxBetAmount = botBalance / (2 + 1.5*group.noMarkets)
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
     allMarketsClosing = true
     for slug in group.slugs
-        if !isMarketClosingSoon(markets[slug])
+        if !isMarketClosingSoon(MarketData[slug])
             allMarketsClosing = false
         end
     end
+
+    bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(MarketData[slug])]
 
     if allMarketsClosing
         printstyled("$(group.name) all markets closed at $(Dates.format(now(), "HH:MM:SS.sss"))\n", bold=true, underline=true)
@@ -294,17 +318,15 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     printedGroupName = false
 
-    bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !isMarketClosingSoon(markets[slug])]
-
-    betAmounts = optimise(group, markets, MarketData, maxBetAmount, bettableSlugsIndex)
-
-    oldProb = [markets[slug].probability::Float64 for slug in group.slugs]
+    betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
+    
+    oldProb = [MarketData[slug].probability for slug in group.slugs]
     oldNoShares = [MarketData[slug].Shares[:NO] for slug in group.slugs]
     oldYesShares = [MarketData[slug].Shares[:YES] for slug in group.slugs]
 
-    newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, markets, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
+    newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
 
-    oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, markets, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
+    oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
 
     profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
     newYesShares = yesShares .- oldYesShares
@@ -354,7 +376,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
-            bet = PlannedBet(abs(amount), shares, outcome, markets[slug]::Market, redeemedMana)
+            bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
         else
             if !printedGroupName
@@ -362,7 +384,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 # printedGroupName = true
                 rerun = :BetMore
             end
-            println("Bet amount: $(amount) is too small, $(slug), $(markets[slug].question)")
+            println("Bet amount: $(amount) is too small, $(slug)")
 
             rerun = :Success
             return rerun
@@ -381,7 +403,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     newProbBySlug = Dict(group.slugs[j] => newProb[j] for j in bettableSlugsIndex)
     for (i, bet) in enumerate(plannedBets)
         amount = betAmounts[i]
-        slug = urlToSlug(bet.market.url)
+        slug = urlToSlug(bet.url)
         bet = plannedBets[i]
 
         if abs(amount) >= .98 * maxBetAmount
@@ -401,8 +423,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             printedGroupName = true
         end
 
-        printstyled("\e]8;;$(markets[slug].url)\e\\$(markets[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
-        println("Prior probs:     $(markets[slug].probability * 100)%")
+        printstyled("\e]8;;$(MarketData[slug].url)\e\\$(MarketData[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
+        println("Prior probs:     $(MarketData[slug].probability * 100)%")
         println("Posterior probs: $(newProbBySlug[slug]*100)%")
         printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)\n", color=:green)
     end
@@ -473,7 +495,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             println()
             showerror(stderr, err, bt)
 
-            fetchMyShares!(marketDataBySlug, markets, BotData.USERID)
+            fetchMyShares!(marketDataBySlug, BotData.USERID)
 
             rerun = :PostFailure
         end
@@ -524,13 +546,13 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
     end
 end
 
-function fetchMyShares!(MarketData, markets, USERID)
-    @sync for (slug, market) in markets
+function fetchMyShares!(MarketDataBySlug, USERID)
+    @sync for (slug, MarketData) in MarketDataBySlug
         @async try
-            positions = getPositionsOnMarket(market.id, userId=USERID)
+            positions = getPositionsOnMarket(MarketData.id, userId=USERID)
             if !isempty(positions)
                 for (outcome, shares) in positions[1].totalShares
-                    MarketData[slug].Shares[Symbol(outcome)] = shares
+                    MarketData.Shares[Symbol(outcome)] = shares
                 end
             end
         catch err
@@ -582,9 +604,9 @@ function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
     marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    markets = getMarkets(getSlugs(groups))
+    getMarkets!(marketDataBySlug, getSlugs(groups))
     USERID = getUserByUsername(USERNAME).id
-    fetchMyShares!(marketDataBySlug, markets, USERID)
+    fetchMyShares!(marketDataBySlug, USERID)
     printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
     botData = BotData(APIKEY, USERNAME, USERID)
@@ -608,15 +630,15 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     lastBetId = getBets(limit=1)[1].id
-    markets = getMarkets(getSlugs(groups))
+    getMarkets!(marketDataBySlug, getSlugs(groups))
     USERID = getUserByUsername(USERNAME).id
     printstyled("Fetching Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    fetchMyShares!(marketDataBySlug, markets, USERID)
+    fetchMyShares!(marketDataBySlug, USERID)
     printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
-    contractIdSet = Set(market.id for market in values(markets))
-    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
-    contractIdToSlug = Dict(markets[slug].id => slug for group in groups for slug in group.slugs)
+    contractIdSet = Set(market.id for market in values(marketDataBySlug))
+    contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
+    contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
 
     botData = BotData(APIKEY, USERNAME, USERID)
     arguments = Arguments(live, confirmBets, printDebug)
@@ -657,15 +679,15 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     lastBetId = getBets(limit=1)[1].id
-    markets = getMarkets(getSlugs(groups))
+    markets = getMarkets!(MarketData, getSlugs(groups))
     USERID = getUserByUsername(USERNAME).id
     printstyled("Fetching Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    fetchMyShares!(marketDataBySlug, markets, USERID)
+    fetchMyShares!(marketDataBySlug, USERID)
     printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
 
-    contractIdSet = Set(market.id for market in values(markets))
-    contractIdToGroupIndex = Dict(markets[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
-    contractIdToSlug = Dict(markets[slug].id => slug for group in groups for slug in group.slugs)
+    contractIdSet = Set(market.id for market in values(marketDataBySlug))
+    contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
+    contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
 
     botData = BotData(APIKEY, USERNAME, USERID)
     arguments = Arguments(live, confirmBets, printDebug)
