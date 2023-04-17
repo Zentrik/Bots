@@ -37,6 +37,7 @@ end
 
 @with_kw struct BotData @deftype String
     APIKEY
+    Supabase_APIKEY
     USERNAME
     USERID
 end
@@ -496,7 +497,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                 if !isnothing(executedBet.fills[end].matchedBetId)
 
-                    limitOrder = getBet(executedBet.fills[end].matchedBetId)
+                    limitOrder = getBet(executedBet.fills[end].matchedBetId, BotData.Supabase_APIKEY)
 
                     amountLeft = 0.
                     sharesLeft = 0.
@@ -595,6 +596,7 @@ function readData()
     data = TOML.parsefile("$(@__DIR__)/Arb.toml")
     GROUPS::Dict{String, Dict{String, Vector{String}}} = data["GROUPS"]
     APIKEY::String = data["APIKEY"]
+    Supabase_APIKEY::String = data["SUPABASE_APIKEY"]
     USERNAME::String = data["USERNAME"]
 
     slugs = getSlugs(GROUPS)
@@ -618,7 +620,7 @@ function readData()
         end
     end
 
-    return GROUPS, APIKEY, USERNAME
+    return GROUPS, APIKEY, Supabase_APIKEY, USERNAME
 end
 
 function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
@@ -693,8 +695,8 @@ function test(groupNames = nothing; live=false, confirmBets=true, printDebug=tru
     printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 end
 
-function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
-    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, USERNAME = readData()  
+function setup(groupNames, live, confirmBets, printDebug)
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)
@@ -716,13 +718,18 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
     contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
 
-    botData = BotData(APIKEY, USERNAME, USERID)
+    botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID)
     arguments = Arguments(live, confirmBets, printDebug)
     groupData = GroupData(groups, contractIdSet, contractIdToGroupIndex, contractIdToSlug)
 
+    return groupData, botData, marketDataBySlug, arguments
+end
+
+function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
+    groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets, printDebug)
 
     if !skip
-        for group in groups
+        for group in groupData.groups
             rerun = :FirstRun
             runs = 0
             
