@@ -1,4 +1,4 @@
-using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters, StaticArrays
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters
 
 struct Group
     name::String
@@ -68,12 +68,15 @@ end
 
 function execute(bet, APIKEY)
     ohno = false
-    response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
+    @time "createBet()" response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
+
+    # response HTTP.post("http://manifold.markets/api/v0/bet", headers = ["Authorization" => "Key " * APIKEY, "Content-Type" => "application/json"], body="{\"amount\":$(bet.amount),\"outcome\":\"$(bet.outcome)\",\"contractId\":\"$(bet.id)\"}")
+
     if response.shares ≉ bet.shares
         io = IOBuffer()
 
-        printstyled(io, "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
+        printstyled("\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
         println(io, response)
         println(io, response.fills)
 
@@ -180,13 +183,13 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     # lb = -[maxBetAmount + min(MarketData[slug].Shares[:YES] / (1 - markets[slug].probability::Float64), 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([-maxBetAmount], length(bettableSlugsIndex))
     # ub = [maxBetAmount + min(MarketData[slug].Shares[:NO] / markets[slug].probability::Float64, 150.) for slug in group.slugs[bettableSlugsIndex]] #repeat([maxBetAmount], length(bettableSlugsIndex))
 
-    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
-    ub = [maxBetAmount + min(redeemManaHack, maxBetAmount, 100.) for slug in group.slugs[bettableSlugsIndex]]
+    
+    ub = repeat([maxBetAmount], length(bettableSlugsIndex))
     lb = -ub
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=2)
+    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -210,7 +213,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     
 
     if bestSolution == repeat([0.], length(bettableSlugsIndex))
-        sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
+        @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3.)
 
         nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
 
@@ -321,9 +324,7 @@ end
 function arbitrageGroup(group, BotData, MarketData, Arguments)
     rerun = :Success
 
-    botBalance = getMarketsAndBalance!(MarketData, group, BotData.USERNAME)
-
-    maxBetAmount = botBalance / (2 + 1.5*group.noMarkets)
+    @time "Get Markets" botBalance = getMarketsAndBalance!(MarketData, group, BotData.USERNAME)
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
     allMarketsClosing = true
@@ -346,7 +347,11 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     printedGroupName = false
 
-    betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
+    maxBetAmount = botBalance / (2 + 1.5*group.noMarkets)
+    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
+    maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
+
+    @time "Optimise()" betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     
     oldProb = [MarketData[slug].probability for slug in group.slugs]
     oldNoShares = [MarketData[slug].Shares[:NO] for slug in group.slugs]
@@ -481,40 +486,42 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     # rerun = bindingConstraint ? :BetMore : :Success
 
     if Arguments.live
-        @sync try 
-            @async for bet in plannedBets 
-                executedBet, ohno = execute(bet, BotData.APIKEY)
+        @time "Making Bets" @sync try 
+            for bet in plannedBets 
+                @async begin
+                    @time "execute" executedBet, ohno = execute(bet, BotData.APIKEY)
 
-                slug = urlToSlug(bet.url)
+                    slug = urlToSlug(bet.url)
 
-                # botBalance -= executedBet.amount
+                    # botBalance -= executedBet.amount
 
-                if ohno
-                    rerun = :UnexpectedBet
-                end
-
-                updateShares!(MarketData[slug], executedBet)
-
-                if !isnothing(executedBet.fills[end].matchedBetId)
-
-                    limitOrder = getBet(executedBet.fills[end].matchedBetId, BotData.Supabase_APIKEY)
-
-                    amountLeft = 0.
-                    sharesLeft = 0.
-                    if limitOrder.outcome == "NO"
-                        sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
-                        amountLeft = sharesLeft * limitOrder.limitProb
-                    elseif limitOrder.outcome == "YES"
-                        sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
-                        amountLeft = sharesLeft * (1 - limitOrder.limitProb)
+                    if ohno
+                        rerun = :UnexpectedBet
                     end
 
-                    MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(limitOrder.limitProb => [amountLeft, sharesLeft])
+                    updateShares!(MarketData[slug], executedBet)
 
-                    if executedBet.outcome == "YES"
-                        MarketData[slug].sortedLimitProbs = Dict(:YES=>[limitOrder.limitProb], :NO=>[])
-                    elseif executedBet.outcome == "NO"
-                        MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
+                    if !isnothing(executedBet.fills[end].matchedBetId)
+
+                        limitOrder = getBet(executedBet.fills[end].matchedBetId, BotData.Supabase_APIKEY)
+
+                        amountLeft = 0.
+                        sharesLeft = 0.
+                        if limitOrder.outcome == "NO"
+                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
+                            amountLeft = sharesLeft * limitOrder.limitProb
+                        elseif limitOrder.outcome == "YES"
+                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
+                            amountLeft = sharesLeft * (1 - limitOrder.limitProb)
+                        end
+
+                        MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(limitOrder.limitProb => [amountLeft, sharesLeft])
+
+                        if executedBet.outcome == "YES"
+                            MarketData[slug].sortedLimitProbs = Dict(:YES=>[limitOrder.limitProb], :NO=>[])
+                        elseif executedBet.outcome == "NO"
+                            MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
+                        end
                     end
                 end
             end
@@ -722,11 +729,11 @@ function setup(groupNames, live, confirmBets, printDebug)
     arguments = Arguments(live, confirmBets, printDebug)
     groupData = GroupData(groups, contractIdSet, contractIdToGroupIndex, contractIdToSlug)
 
-    return groupData, botData, marketDataBySlug, arguments
+    return groupData, botData, marketDataBySlug, arguments, lastBetId
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
-    groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets, printDebug)
+    groupData, botData, marketDataBySlug, arguments, lastBetId = setup(groupNames, live, confirmBets, printDebug)
 
     if !skip
         for group in groupData.groups
