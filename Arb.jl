@@ -1,5 +1,7 @@
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters
 
+const FEE = 0.03
+
 struct Group
     name::String
     slugs::Vector{String}
@@ -151,7 +153,7 @@ function f!(betAmount, group, MarketData, bettableSlugsIndex, sharesByEvent, pro
             shares = 0.
             @inline shares = betToShares(market.p, market.pool, market.probability, market.limitOrders, market.sortedLimitProbs, betAmount[i]).shares
 
-            fees += 0.05
+            fees += FEE
 
             if betAmount[i] >= 1.
                 profitsByEvent .+= @view(group.y_matrix[:, j]) .* shares
@@ -237,6 +239,7 @@ function getMarkets!(MarketData, slugs)
     @sync for slug in slugs
         @async try
             market = getMarketBySlug(slug)
+
             MarketData[slug].probability = market.probability::Float64
             MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
             MarketData[slug].pool = market.pool
@@ -262,6 +265,15 @@ function getMarketsAndBalance!(MarketData, group, USERNAME)
         for slug in group.slugs
             @async try
                 market = getMarketBySlug(slug)
+
+                if MarketData[slug].probability ≉ market.probability::Float64 || (MarketData[slug].pool[:YES] ≉ market.pool[:YES] || MarketData[slug].pool[:NO] ≉ market.pool[:NO]) || MarketData[slug].p ≉ market.p::Float64
+                    println(MarketData[slug])
+                    println(market)
+
+                    println(MarketData[slug].pool)
+                    println(market.pool)
+                end
+
                 MarketData[slug].probability = market.probability::Float64
                 MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
                 MarketData[slug].pool = market.pool
@@ -426,7 +438,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
 
-    if (profit ≤ 0) && !(profit + .05 * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.)
+    if (profit ≤ 0) && !(profit + FEE * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.)
         rerun = :Success
         return rerun
     end
@@ -473,7 +485,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         printedGroupName = true
     end
 
-    printstyled("Profits:         $(profit + .05 * length(plannedBets))\n", color=:yellow) # no more fee, but we still want to use fee in optimisation
+    printstyled("Profits:         $(profit + FEE * length(plannedBets))\n", color=:yellow) # no more fee, but we still want to use fee in optimisation
 
     if Arguments.confirmBets
         println("Proceed? (y/n)") 
@@ -486,7 +498,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     # rerun = bindingConstraint ? :BetMore : :Success
 
     if Arguments.live
-        @time "Making Bets" @sync try 
+        @sync try 
             for bet in plannedBets 
                 @async begin
                     executedBet, ohno = execute(bet, BotData.APIKEY)
@@ -547,19 +559,36 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
 
     seenGroups = Set{Int}()
 
-    # for bet in Iterators.reverse(bets)
-    #     if bet.contractId in GroupData.contractIdSet
-    #         slug
-    #         MarketData[slug].probability = bet.probAfter
-            # if bet.isLiquidityProvision
-            #     MarketData[slug].p = bet.probAfter
-            # end
-    #         MarketData[slug].pool = bet.probAfter
+    for bet in Iterators.reverse(bets)
+        if bet.contractId in GroupData.contractIdSet
+            slug = GroupData.contractIdToSlug[bet.contractId]
+            if !isnothing(bet.isLiquidityProvision) && bet.isLiquidityProvision
+                # MarketData[slug].pool[:YES] += bet.shares
+                # MarketData[slug].p = bet.probAfter
+            elseif !isnothing(bet.fills)
+                shares = 0.
+                amount = 0.
 
-    #         MarketData[slug].isResolved = bet.probAfter
-    #         MarketData[slug].closeTime = bet.probAfter
-    #     end
-    # end
+                for fill in bet.fills
+                    if isnothing(fill.matchedBetId)
+                        shares += fill.shares
+                        amount += fill.amount
+                    end
+                end
+
+                MarketData[slug].probability = bet.probAfter
+                
+                for outcome in (:NO, :YES)
+                    MarketData[slug].pool[outcome] += amount
+                end
+
+                MarketData[slug].pool[Symbol(bet.outcome)] -= shares
+
+                # MarketData[slug].isResolved = bet.probAfter
+                # MarketData[slug].closeTime = bet.probAfter
+            end
+        end
+    end
 
     for bet in bets
         if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
