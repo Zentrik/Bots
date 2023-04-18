@@ -68,7 +68,7 @@ end
 
 function execute(bet, APIKEY)
     ohno = false
-    @time "createBet()" response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
+    response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
 
     # response HTTP.post("http://manifold.markets/api/v0/bet", headers = ["Authorization" => "Key " * APIKEY, "Content-Type" => "application/json"], body="{\"amount\":$(bet.amount),\"outcome\":\"$(bet.outcome)\",\"contractId\":\"$(bet.id)\"}")
@@ -489,7 +489,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         @time "Making Bets" @sync try 
             for bet in plannedBets 
                 @async begin
-                    @time "execute" executedBet, ohno = execute(bet, BotData.APIKEY)
+                    executedBet, ohno = execute(bet, BotData.APIKEY)
 
                     slug = urlToSlug(bet.url)
 
@@ -546,6 +546,20 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
     println(length(bets))
 
     seenGroups = Set{Int}()
+
+    # for bet in Iterators.reverse(bets)
+    #     if bet.contractId in GroupData.contractIdSet
+    #         slug
+    #         MarketData[slug].probability = bet.probAfter
+            # if bet.isLiquidityProvision
+            #     MarketData[slug].p = bet.probAfter
+            # end
+    #         MarketData[slug].pool = bet.probAfter
+
+    #         MarketData[slug].isResolved = bet.probAfter
+    #         MarketData[slug].closeTime = bet.probAfter
+    #     end
+    # end
 
     for bet in bets
         if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
