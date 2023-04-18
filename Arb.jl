@@ -783,24 +783,27 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, printDebu
     delay = 60
     lastRunTime = time()
 
-    try
-        production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
-    catch err
-        bt = catch_backtrace()
-        println()
-        showerror(stderr, err, bt)
+    while true
+        try
+            production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
 
-        if err isa MethodError || err isa InterruptException
-            throw(err)
-        end
-        
-        if time() - lastRunTime > 3600
-            delay = 60
-        end
-        sleep(delay)
+            if err isa MethodError || err isa InterruptException
+                throw(err)
+                break
+            end
+            
+            if time() - lastRunTime > 3600
+                delay = 60
+            end
+            sleep(delay)
 
-        delay *= 5
-        lastRunTime = time()
+            delay *= 5
+            lastRunTime = time()
+        end
     end
 end
 
