@@ -382,7 +382,6 @@ USERNAME = "Bot"
 "https://manifold.markets/Butidigress/will-destiny-livestream-on-cozytv-b" = ["YES", "NO", "NO"]
 "https://manifold.markets/Butidigress/will-destiny-livestream-on-cozytv-i" = ["YES", "YES", "NO"]
 
-
 [GROUPS."Eurovision"]
 "https://manifold.markets/Yoav/will-ukraine-win-eurovision-2023" = ["YES", "NO"]
 "https://manifold.markets/DFWolves/will-ukraine-win-eurovision-2023-1f38d46a2d38" = ["YES", "NO"]

@@ -267,13 +267,13 @@ function getMarketsAndBalance!(MarketData, group, USERNAME)
             @async try
                 market = getMarketBySlug(slug)
 
-                if MarketData[slug].probability ≉ market.probability::Float64 || ((MarketData[slug].pool[:YES] ≉ market.pool[:YES] || MarketData[slug].pool[:NO] ≉ market.pool[:NO]) && MarketData[slug].p ≈ market.p::Float64) # || MarketData[slug].p ≉ market.p::Float64
-                    println(MarketData[slug])
-                    println(market)
+                # if MarketData[slug].probability ≉ market.probability::Float64 || ((MarketData[slug].pool[:YES] ≉ market.pool[:YES] || MarketData[slug].pool[:NO] ≉ market.pool[:NO]) && MarketData[slug].p ≈ market.p::Float64) # || MarketData[slug].p ≉ market.p::Float64
+                #     println(MarketData[slug])
+                #     println(market)
 
-                    println(MarketData[slug].pool)
-                    println(market.pool)
-                end
+                #     println(MarketData[slug].pool)
+                #     println(market.pool)
+                # end
 
                 MarketData[slug].probability = market.probability::Float64
                 MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
@@ -310,8 +310,8 @@ function getLiveBets(lastBetId)
     numberOfBetsFetched = 0
     lastBetFetched = nothing
 
-    while !gotAllBets && numberOfBetsFetched <= 100
-        toFetch = 5+rand(0:5)
+    while !gotAllBets && numberOfBetsFetched <= 30
+        toFetch = 3+rand(0:8)
         tmp = getBets(limit=toFetch, before=lastBetFetched)
 
         for (i, bet) in enumerate(tmp) # probably faster to go in reverse
@@ -583,36 +583,36 @@ function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
 
     seenGroups = Set{Int}()
 
-    for bet in Iterators.reverse(bets)
-        if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
-            slug = GroupData.contractIdToSlug[bet.contractId]
-            if !isnothing(bet.isLiquidityProvision) && bet.isLiquidityProvision
-                # MarketData[slug].pool[:YES] += bet.shares
-                # MarketData[slug].p = bet.probAfter
-            elseif !isnothing(bet.fills)
-                shares = 0.
-                amount = 0.
+    # for bet in Iterators.reverse(bets)
+    #     if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
+    #         slug = GroupData.contractIdToSlug[bet.contractId]
+    #         if !isnothing(bet.isLiquidityProvision) && bet.isLiquidityProvision
+    #             # MarketData[slug].pool[:YES] += bet.shares
+    #             # MarketData[slug].p = bet.probAfter
+    #         elseif !isnothing(bet.fills)
+    #             shares = 0.
+    #             amount = 0.
 
-                for fill in bet.fills
-                    if isnothing(fill.matchedBetId)
-                        shares += fill.shares
-                        amount += fill.amount
-                    end
-                end
+    #             for fill in bet.fills
+    #                 if isnothing(fill.matchedBetId)
+    #                     shares += fill.shares
+    #                     amount += fill.amount
+    #                 end
+    #             end
 
-                MarketData[slug].probability = bet.probAfter
+    #             MarketData[slug].probability = bet.probAfter
                 
-                for outcome in (:NO, :YES)
-                    MarketData[slug].pool[outcome] += amount
-                end
+    #             for outcome in (:NO, :YES)
+    #                 MarketData[slug].pool[outcome] += amount
+    #             end
 
-                MarketData[slug].pool[Symbol(bet.outcome)] -= shares
+    #             MarketData[slug].pool[Symbol(bet.outcome)] -= shares
 
-                # MarketData[slug].isResolved = bet.probAfter
-                # MarketData[slug].closeTime = bet.probAfter
-            end
-        end
-    end
+    #             # MarketData[slug].isResolved = bet.probAfter
+    #             # MarketData[slug].closeTime = bet.probAfter
+    #         end
+    #     end
+    # end
 
     for bet in bets
         if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
@@ -778,7 +778,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
 
         # sleep(15)
-        sleep(max(5, 15 - (time() - lastRunTime)) + rand())
+        sleep(max(2.5, 7.5 - (time() - lastRunTime)) + rand())
         # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
     end
 end
