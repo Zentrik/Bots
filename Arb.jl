@@ -508,7 +508,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                     #     # MarketData[slug].closeTime = bet.probAfter
                     # end
 
-                    getMarkets!(MarketData, [slug]) # Need to fetch to deal with liquidity
+                    # getMarkets!(MarketData, [slug]) # Need to fetch to deal with liquidity
                     MarketData[slug].probability = executedBet.probAfter # if prob changed, we don't want to update otherwise we wont arb again.
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
@@ -573,7 +573,8 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
 
             try
                 if rerun == :FirstRun
-                    @time "Get Market" getMarkets!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
+                    # @time "Get Market" getMarkets!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
+                    @time "Get All Markets" getMarkets!(MarketData, group.slugs)
                 else
                     # Needed as we need to update p and pool after betting
                     @time "Get All Markets" getMarkets!(MarketData, group.slugs)
