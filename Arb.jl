@@ -94,14 +94,16 @@ function execute(bet, APIKEY)
     return response, ohno
 end
 
-function updateShares!(MarketData, newBet)
+function updateShares!(MarketData, newBet, BotData)
     MarketData.Shares[Symbol(newBet.outcome)] += newBet.shares
 
     if MarketData.Shares[:YES] >= MarketData.Shares[:NO]
         MarketData.Shares[:YES] -= MarketData.Shares[:NO]
+        BotData.balance += MarketData.Shares[:NO]
         MarketData.Shares[:NO] = 0.
     elseif MarketData.Shares[:YES] < MarketData.Shares[:NO]
         MarketData.Shares[:NO] -= MarketData.Shares[:YES]
+        BotData.balance += MarketData.Shares[:YES]
         MarketData.Shares[:YES] = 0.
     end
 end
@@ -483,7 +485,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                         rerun = :UnexpectedBet
                     end
 
-                    updateShares!(MarketData[slug], executedBet)
+                    updateShares!(MarketData[slug], executedBet, BotData)
 
                     # if !isnothing(executedBet.fills)
                     #     shares = 0.
