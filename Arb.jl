@@ -734,6 +734,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
             runs = 0
             
             while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
+                @time "Get All Markets" getMarkets!(MarketData, group.slugs)
                 rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
 
                 runs += 1
@@ -745,7 +746,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
-    WebSockets.open(uri(botData.Supabase_APIKEY), socket_type_tls=OpenSSL.SSLStream) do socket
+    WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
         println("Opened Socket")
         # println(socket)
     
