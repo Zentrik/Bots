@@ -192,7 +192,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1.5)
+    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -450,7 +450,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     for (i, bet) in enumerate(plannedBets)
         amount = betAmounts[i]
         slug = urlToSlug(bet.url)
-        bet = plannedBets[i]
+        bet = plannedBets[i] #?
 
         if abs(amount) >= .98 * maxBetAmount
             printstyled("Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount\n", color=:orange)
