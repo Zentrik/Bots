@@ -229,26 +229,60 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     return bestSolution
 end
 
+function updateMarketData!(MarketData, market)
+    MarketData.probability = market.prob
+    MarketData.p = market.p # can change if a subsidy is given
+    MarketData.pool = market.pool
+    MarketData.id = market.id
+    MarketData.question = market.question
+    MarketData.url = "https://manifold.markets/$(market.creatorUsername)/$(market.slug)"
+
+    MarketData.isResolved = market.isResolved
+    MarketData.closeTime = market.closeTime
+end
+
 function getMarkets!(MarketData, slugs)
-    @sync for slug in slugs
+    @sync for paritionedSlugs in Iterators.partition(slugs, 20) # 2000 is max characters in uri, so we have about 1900 for slugs, max slug is about 50 : 1900/50 is 38. generous magin to 20
         @async try
-            market = getMarketBySlug(slug)
-
-            MarketData[slug].probability = market.probability::Float64
-            MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
-            MarketData[slug].pool = market.pool
-            MarketData[slug].id = market.id
-            MarketData[slug].question = market.question
-            MarketData[slug].url = market.url
-
-            MarketData[slug].isResolved = market.isResolved
-            MarketData[slug].closeTime = market.closeTime
+            contracts_slugs = join(paritionedSlugs, ",")
+    
+            response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?slug=in.($contracts_slugs)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+            responseJSON = JSON3.read(response.body)
+    
+            for contract in responseJSON
+                updateMarketData!(MarketData[contract.slug], contract.data)
+            end
         catch err
             bt = catch_backtrace()
             println()
             showerror(stderr, err, bt)
+            println(contract)
             throw(err)
         end
+    end
+end
+
+function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri is too long
+    try
+        for slug in slugs
+            @assert !isnothing(MarketData[slug].id)
+        end
+        
+        contracts_ids = join(map(slug -> MarketData[slug].id, slugs), ",") # might be faster to index by id
+        # contracts_slugs = join(slugs, ",")
+
+        @assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
+        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+        responseJSON = JSON3.read(response.body)
+
+        for contract in responseJSON
+            updateMarketData!(MarketData[contract.slug], contract.data)
+        end
+    catch err
+        bt = catch_backtrace()
+        println()
+        showerror(stderr, err, bt)
+        throw(err)
     end
 end
 
@@ -491,15 +525,15 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
                 sleep(delay)
                 delay *= 5
             end 
-            printstyled("Running $(group.name)\n", color=:light_cyan)
+            printstyled("Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))\n", color=:light_cyan)
 
             try
                 if rerun == :FirstRun
-                    # @time "Get Market" getMarkets!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
-                    @time "Get All Markets" getMarkets!(MarketData, group.slugs)
+                    # @time "Get Market" getMarketsUsingId!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
+                    @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
                 else
                     # Needed as we need to update p and pool after betting
-                    @time "Get All Markets" getMarkets!(MarketData, group.slugs)
+                    @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
                 end
                 rerun = arbitrageGroup(group, BotData, MarketData, Arguments)
             catch err
@@ -520,21 +554,29 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
     return nothing
 end
 
-function fetchMyShares!(MarketDataBySlug, USERID)
-    @sync for (slug, MarketData) in MarketDataBySlug
-        @async try
-            positions = getPositionsOnMarket(MarketData.id, userId=USERID)
-            if !isempty(positions)
-                for (outcome, shares) in positions[1].totalShares
-                    MarketData.Shares[Symbol(outcome)] = shares
-                end
+function fetchMyShares!(MarketDataBySlug, groupData, USERID)
+    try
+        # https://discourse.julialang.org/t/broadcast-object-property/47104/6
+        contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
+
+        @assert length(MarketDataBySlug) < 1000
+        # will fail if we have more than 1000
+        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+        responseJSON = JSON3.read(response.body)
+
+        # what if it returns nothing for some contract? presumably that means we never invested so MarketData shoudl already be correct
+
+        for contract_metrics in responseJSON
+            slug = groupData.contractIdToSlug[contract_metrics.contract_id]
+            for (outcome, shares) in contract_metrics.data.totalShares
+                MarketDataBySlug[slug].Shares[outcome] = shares
             end
-        catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
-            throw(err)
         end
+    catch err
+        bt = catch_backtrace()
+        println()
+        showerror(stderr, err, bt)
+        throw(err)
     end
 end
 
@@ -570,6 +612,8 @@ function readData()
 end
 
 function setup(groupNames, live, confirmBets, printDebug)
+    arguments = Arguments(live, confirmBets, printDebug)
+
     GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
 
     if groupNames !== nothing
@@ -581,21 +625,19 @@ function setup(groupNames, live, confirmBets, printDebug)
     marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    getMarkets!(marketDataBySlug, getSlugs(groups))
-    botUser = getUserByUsername(USERNAME)
+    @time "Fetching User" botUser = getUserByUsername(USERNAME)
     USERID = botUser.id
     botBalance = botUser.balance
-    printstyled("Fetching Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    fetchMyShares!(marketDataBySlug, USERID)
-    printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
+    botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID, botBalance)
 
+    @time "Fetching Markets" getMarkets!(marketDataBySlug, getSlugs(groups))
     contractIdSet = Set(market.id for market in values(marketDataBySlug))
     contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
     contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
-
-    botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID, botBalance)
-    arguments = Arguments(live, confirmBets, printDebug)
     groupData = GroupData(groups, contractIdSet, contractIdToGroupIndex, contractIdToSlug)
+
+    @time "Fetching Shares" fetchMyShares!(marketDataBySlug, groupData, USERID)
+
 
     return groupData, botData, marketDataBySlug, arguments
 end
@@ -609,7 +651,9 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
             runs = 0
             
             while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
-                @time "Get All Markets" getMarkets!(MarketData, group.slugs)
+                if rerun != :FirstRun
+                    @time "Get All Markets" getMarketsUsingId!(marketDataBySlug, group.slugs)
+                end
                 rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
 
                 runs += 1
@@ -623,7 +667,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         println("Opened Socket")
         println(socket)
     
-        # send(socket, pushJSON("contracts", "live-contracts"))
         send(socket, pushJSON("contract_bets"))
         println("Sent Intialisation")
     
@@ -634,8 +677,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                     @async begin
                         msgJSON = JSON3.read(msg)
                         if :payload in keys(msgJSON) && :data in keys(msgJSON.payload)
-                            println("Received message: $(msgJSON.payload.data.record.data.userUsername)")
-
                             try
                                 marketId = msgJSON.payload.data.record.data.contractId
                             
@@ -692,7 +733,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     
                 msg = receive(socket)
                 println("Received message: $msg")
-                # println("Received message: $(JSON.parse(String(msg)))")
     
                 close(socket)
             end
@@ -715,9 +755,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     end
 end
 
-function test(groupNames = nothing; live=false, confirmBets=true, printDebug=true, skip=false)
-    production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
-end
+test(groupNames = nothing; live=false, confirmBets=true, printDebug=true, skip=false) = production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
 
 function retryProd(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
     delay = 60
