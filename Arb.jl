@@ -1,4 +1,6 @@
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters
+using HTTP, JSON3, Dates, OpenSSL
+using HTTP.WebSockets
 
 const FEE = 0.03
 Base.exit_on_sigint(false)
@@ -38,11 +40,12 @@ end
     closeTime::Int = -1
 end
 
-@with_kw struct BotData @deftype String
-    APIKEY
-    Supabase_APIKEY
-    USERNAME
-    USERID
+@with_kw mutable struct BotData @deftype String
+    const APIKEY
+    const Supabase_APIKEY
+    const USERNAME
+    const USERID
+    balance::Float64 = 0
 end
 
 struct GroupData
@@ -93,6 +96,14 @@ end
 
 function updateShares!(MarketData, newBet)
     MarketData.Shares[Symbol(newBet.outcome)] += newBet.shares
+
+    if MarketData.Shares[:YES] >= MarketData.Shares[:NO]
+        MarketData.Shares[:YES] -= MarketData.Shares[:NO]
+        MarketData.Shares[:NO] = 0.
+    elseif MarketData.Shares[:YES] < MarketData.Shares[:NO]
+        MarketData.Shares[:NO] -= MarketData.Shares[:YES]
+        MarketData.Shares[:YES] = 0.
+    end
 end
 
 function redeemShares!(MarketData)
@@ -192,7 +203,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1.5)
+    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1)
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -267,14 +278,6 @@ function getMarketsAndBalance!(MarketData, group, USERNAME)
             @async try
                 market = getMarketBySlug(slug)
 
-                # if MarketData[slug].probability ≉ market.probability::Float64 || ((MarketData[slug].pool[:YES] ≉ market.pool[:YES] || MarketData[slug].pool[:NO] ≉ market.pool[:NO]) && MarketData[slug].p ≈ market.p::Float64) # || MarketData[slug].p ≉ market.p::Float64
-                #     println(MarketData[slug])
-                #     println(market)
-
-                #     println(MarketData[slug].pool)
-                #     println(market.pool)
-                # end
-
                 MarketData[slug].probability = market.probability::Float64
                 MarketData[slug].p = market.p::Float64 # can change if a subsidy is given
                 MarketData[slug].pool = market.pool
@@ -302,42 +305,10 @@ getSlugs(groups::Vector{Group}) = mapreduce(group -> group.slugs, vcat, groups)
 
 isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
-# Returns all bets since lastBetId exclusive.
-function getLiveBets(lastBetId)
-    gotAllBets = false
-    Bets = Bet[]
-
-    numberOfBetsFetched = 0
-    lastBetFetched = nothing
-
-    while !gotAllBets && numberOfBetsFetched <= 30
-        toFetch = 3+rand(0:8)
-        tmp = getBets(limit=toFetch, before=lastBetFetched)
-
-        for (i, bet) in enumerate(tmp) # probably faster to go in reverse
-            if bet.id == lastBetId
-                gotAllBets = true
-                append!(Bets, tmp[1:i-1])
-                break
-            end
-        end
-
-        numberOfBetsFetched += toFetch
-
-        lastBetFetched = tmp[end].id
-
-        if !gotAllBets
-            append!(Bets, tmp)
-        end
-    end
-
-    return Bets
-end
-
 function arbitrageGroup(group, BotData, MarketData, Arguments)
     rerun = :Success
 
-    @time "Get Markets" botBalance = getMarketsAndBalance!(MarketData, group, BotData.USERNAME)
+    # @time "Get Markets" BotData.balance = getMarketsAndBalance!(MarketData, group, BotData.USERNAME)
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
     allMarketsClosing = true
@@ -360,7 +331,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     printedGroupName = false
 
-    maxBetAmount = botBalance / (2 + 1.5*group.noMarkets)
+    maxBetAmount = BotData.balance / (2 + 1.5*group.noMarkets)
     redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
     maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
 
@@ -475,8 +446,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)\n", color=:green)
     end
 
-    if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + botBalance - 100
-        println("Insufficient Balance $botBalance for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets)).")
+    if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100
+        println("Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets)).")
         rerun = :Success
         return rerun
     end
@@ -506,7 +477,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                     slug = urlToSlug(bet.url)
 
-                    # botBalance -= executedBet.amount
+                    BotData.balance -= executedBet.amount
 
                     if ohno
                         rerun = :UnexpectedBet
@@ -514,28 +485,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                     updateShares!(MarketData[slug], executedBet)
 
-                    if !isnothing(executedBet.fills)
-                        shares = 0.
-                        amount = 0.
-        
-                        for fill in executedBet.fills
-                            if isnothing(fill.matchedBetId)
-                                shares += fill.shares
-                                amount += fill.amount
-                            end
-                        end
-        
-                        MarketData[slug].probability = executedBet.probAfter
-                        
-                        for outcome in (:NO, :YES)
-                            MarketData[slug].pool[outcome] += amount
-                        end
-        
-                        MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
-        
-                        # MarketData[slug].isResolved = bet.probAfter
-                        # MarketData[slug].closeTime = bet.probAfter
-                    end
+                    MarketData[slug].probability = executedBet.probAfter
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
 
@@ -577,76 +527,98 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     end
 end
 
-function arbitrage(GroupData, BotData, MarketData, lastBetId, Arguments)
-    bets = getLiveBets(lastBetId)
-    println(length(bets))
+function arb(bet, GroupData, BotData, MarketData, Arguments)
+    marketId = bet.contractId
+    slug = GroupData.contractIdToSlug[marketId]
 
-    seenGroups = Set{Int}()
+	if marketId in GroupData.contractIdSet && MarketData[slug].probability ≉ bet.probAfter && bet.userUsername != BotData.USERNAME  
+        MarketData[slug].probability = bet.probAfter # prevents this code trigerring if the same bet is fedthrough, doesn't matter that we fetch true prob later as due to async the if check happens before that.
 
-    # for bet in Iterators.reverse(bets)
-    #     if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
-    #         slug = GroupData.contractIdToSlug[bet.contractId]
-    #         if !isnothing(bet.isLiquidityProvision) && bet.isLiquidityProvision
-    #             # MarketData[slug].pool[:YES] += bet.shares
-    #             # MarketData[slug].p = bet.probAfter
-    #         elseif !isnothing(bet.fills)
-    #             shares = 0.
-    #             amount = 0.
+        group = GroupData.groups[GroupData.contractIdToGroupIndex[marketId]]
 
-    #             for fill in bet.fills
-    #                 if isnothing(fill.matchedBetId)
-    #                     shares += fill.shares
-    #                     amount += fill.amount
-    #                 end
-    #             end
+        rerun = :FirstRun
+        runs = 0
+        delay = 60
+        
+        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
+            if rerun == :PostFailure
+                sleep(delay)
+                delay *= 5
+            end 
+            printstyled("Running $(group.name)\n", color=:light_cyan)
 
-    #             MarketData[slug].probability = bet.probAfter
-                
-    #             for outcome in (:NO, :YES)
-    #                 MarketData[slug].pool[outcome] += amount
-    #             end
-
-    #             MarketData[slug].pool[Symbol(bet.outcome)] -= shares
-
-    #             # MarketData[slug].isResolved = bet.probAfter
-    #             # MarketData[slug].closeTime = bet.probAfter
-    #         end
-    #     end
-    # end
-
-    for bet in bets
-        if bet.contractId in GroupData.contractIdSet && bet.userUsername != BotData.USERNAME 
-            if GroupData.contractIdToGroupIndex[bet.contractId] ∉ seenGroups && (isnothing(bet.limitProb) || !(bet.probAfter ≈ bet.probBefore))
-                rerun = :FirstRun
-                runs = 0
-                delay = 60
-                
-                while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
-                    if rerun == :PostFailure
-                        sleep(delay)
-                        delay *= 5
-                    end 
-                    printstyled("Running $(GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]].name)\n", color=:light_cyan)
-                    rerun = arbitrageGroup(GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]], BotData, MarketData, Arguments)
-
-                    runs += 1
+            try
+                if rerun == :FirstRun
+                    @time "Get Market" getMarkets!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
+                else
+                    # Needed as we need to update p and pool after betting
+                    @time "Get All Markets" getMarkets!(MarketData, group.slugs)
                 end
-                push!(seenGroups, GroupData.contractIdToGroupIndex[bet.contractId])
-
-                for slug in GroupData.groups[GroupData.contractIdToGroupIndex[bet.contractId]].slugs
-                    MarketData[slug].limitOrders = Dict{Symbol, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
-                    MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[])
-                end
+                rerun = arbitrageGroup(group, BotData, MarketData, Arguments)
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+                rethrow()
             end
+            runs += 1
         end
-    end
 
-    if length(bets) == 0
-        return lastBetId
-    else
-        return bets[1].id
-    end
+        for slug in GroupData.groups[GroupData.contractIdToGroupIndex[marketId]].slugs
+            MarketData[slug].limitOrders = Dict{Symbol, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
+            MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[])
+        end
+	end
+
+    return nothing
 end
+
+
+# function arb(market, GroupData, BotData, MarketData, Arguments)
+# 	if market.id in GroupData.contractIdSet
+#         println(market)
+#         println(MarketData[market.slug].probability)
+#         oldProb = MarketData[market.slug].probability
+#         MarketData[market.slug].probability = market.prob
+#         MarketData[market.slug].p = market.p
+#         MarketData[market.slug].pool = stringKeysToSymbol(market.pool)
+#         MarketData[market.slug].isResolved = market.isResolved
+#         MarketData[market.slug].closeTime = market.closeTime
+
+#         println(oldProb)
+#         println(market.prob)
+#         if oldProb ≉ market.prob
+# 			rerun = :FirstRun
+# 			runs = 0
+# 			delay = 60
+			
+# 			while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
+# 				if rerun == :PostFailure
+# 					sleep(delay)
+# 					delay *= 5
+# 				end 
+# 				printstyled("Running $(GroupData.groups[GroupData.contractIdToGroupIndex[market.id]].name)\n", color=:light_cyan)
+#                 println(rerun)
+#                 try
+# 				    rerun = arbitrageGroup(GroupData.groups[GroupData.contractIdToGroupIndex[market.id]], BotData, MarketData, Arguments)
+#                 catch err
+#                     bt = catch_backtrace()
+#                     println()
+#                     showerror(stderr, err, bt)
+#                     rethrow()
+#                 end
+# 				runs += 1
+# 			end
+
+# 			for slug in GroupData.groups[GroupData.contractIdToGroupIndex[market.id]].slugs
+# 				MarketData[slug].limitOrders = Dict{Symbol, Dict{Float64, Vector{Float64}}}() # need to reset as we aren't tracking limit orders
+# 				MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[])
+# 			end
+# 		end
+# 	end
+
+#     return nothing
+# end
 
 function fetchMyShares!(MarketDataBySlug, USERID)
     @sync for (slug, MarketData) in MarketDataBySlug
@@ -697,29 +669,6 @@ function readData()
     return GROUPS, APIKEY, Supabase_APIKEY, USERNAME
 end
 
-function testIndividualGroup(live=false, confirmBets=true, printDebug=true)
-    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, USERNAME = readData()
-
-    groups = Group.(keys(GROUPS), values(GROUPS))
-
-    groups = [groups[1]]
-    
-    marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
-
-    printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    getMarkets!(marketDataBySlug, getSlugs(groups))
-    USERID = getUserByUsername(USERNAME).id
-    fetchMyShares!(marketDataBySlug, USERID)
-    printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-
-    botData = BotData(APIKEY, USERNAME, USERID)
-    arguments = Arguments(live, confirmBets, printDebug)
-
-    printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-    arbitrageGroup(groups[1], botData, marketDataBySlug, arguments)
-    printstyled("Done at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
-end
-
 function setup(groupNames, live, confirmBets, printDebug)
     GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
 
@@ -732,9 +681,10 @@ function setup(groupNames, live, confirmBets, printDebug)
     marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
-    lastBetId = getBets(limit=1)[1].id
     getMarkets!(marketDataBySlug, getSlugs(groups))
-    USERID = getUserByUsername(USERNAME).id
+    botUser = getUserByUsername(USERNAME)
+    USERID = botUser.id
+    botBalance = botUser.balance
     printstyled("Fetching Shares at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
     fetchMyShares!(marketDataBySlug, USERID)
     printstyled("Done fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
@@ -743,15 +693,15 @@ function setup(groupNames, live, confirmBets, printDebug)
     contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
     contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
 
-    botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID)
+    botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID, botBalance)
     arguments = Arguments(live, confirmBets, printDebug)
     groupData = GroupData(groups, contractIdSet, contractIdToGroupIndex, contractIdToSlug)
 
-    return groupData, botData, marketDataBySlug, arguments, lastBetId
+    return groupData, botData, marketDataBySlug, arguments
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
-    groupData, botData, marketDataBySlug, arguments, lastBetId = setup(groupNames, live, confirmBets, printDebug)
+    groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets, printDebug)
 
     if !skip
         for group in groupData.groups
@@ -764,22 +714,105 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                 runs += 1
             end
 
-            redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
+            # redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
         end
     end
 
-    while true
-        lastRunTime = time()
-        printstyled("Running at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+    TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
-        lastBetId = arbitrage(groupData, botData, marketDataBySlug, lastBetId, arguments)
-        redeemShares!(marketDataBySlug) # just needs to be run periodically to prevent overflow
+    WebSockets.open(uri(botData.Supabase_APIKEY), socket_type_tls=OpenSSL.SSLStream) do socket
+        println("Opened Socket")
+        # println(socket)
+    
+        # send(socket, pushJSON("contracts", "live-contracts"))
+        send(socket, pushJSON("contract_bets"))
+        println("Sent Intialisation")
+    
+        try
+            @sync begin
+                #Reading messages
+                @async for msg in socket
+                    @async begin
+                        msgJSON = JSON3.read(msg)
+                        if :payload in keys(msgJSON) && :data in keys(msgJSON.payload)
+                            println("Received message: $(msgJSON.payload.data.record.data.userUsername)")
 
-        printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :magenta)
+                            try
+                                marketId = msgJSON.payload.data.record.data.contractId
+                            
+                                if marketId in groupData.contractIdSet && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                                    TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                    arb(msgJSON.payload.data.record.data, groupData, botData, marketDataBySlug, arguments)
+                                end
+                            catch err
+                                bt = catch_backtrace()
+                                println()
+                                showerror(stderr, err, bt)
+                                rethrow(err)
+                            end
+                        else
+                            println(msg)
+                        end
+                    end
+                end
+    
+                # HeartBeat
+                @async while !WebSockets.isclosed(socket)
+                    printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    send(socket, heartbeatJSON)
+                    printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    sleep(30)
+                end
 
-        # sleep(15)
-        sleep(max(2.5, 7.5 - (time() - lastRunTime)) + rand())
-        # sleep(60 + 2*(rand()-.5) * 5) # - (time() - oldTime) # add some randomness so it can't be exploited based on predicability of betting time.
+                # Fetch new balance at 8am
+                @async while !WebSockets.isclosed(socket)
+                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    botData.balance = getUserByUsername(botData.USERNAME).balance
+                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
+                    timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
+                    sleep(timeTo8)
+                end
+            end
+        catch err
+            if err isa InterruptException
+                println("Caught Interrupt")
+                return
+            end
+            bt = catch_backtrace()
+            println("Caught")
+            showerror(stderr, err, bt)
+            rethrow(err)
+
+            println("Finally Caught")
+            if !WebSockets.isclosed(socket)
+                send(socket, leaveJSON())
+                println("Left Channel in catch")
+    
+                msg = receive(socket)
+                println("Received message: $msg")
+                # println("Received message: $(JSON.parse(String(msg)))")
+    
+                close(socket)
+            end
+        finally
+            println("Finally")
+            if !WebSockets.isclosed(socket)
+                send(socket, leaveJSON("live-contracts"))
+                println("Left Channel")
+    
+                # msg = receive(socket)
+                # println("Received message: $msg")
+                # println("Received message: $(JSON.parse(String(msg)))")
+    
+                close(socket)
+            end
+        end
+    
+        println("Finished")
+        println(WebSockets.isclosed(socket))
     end
 end
 
