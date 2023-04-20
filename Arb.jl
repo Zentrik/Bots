@@ -485,7 +485,29 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                     updateShares!(MarketData[slug], executedBet)
 
-                    MarketData[slug].probability = executedBet.probAfter
+                    # if !isnothing(executedBet.fills)
+                    #     shares = 0.
+                    #     amount = 0.
+        
+                    #     for fill in executedBet.fills
+                    #         if isnothing(fill.matchedBetId)
+                    #             shares += fill.shares
+                    #             amount += fill.amount
+                    #         end
+                    #     end
+                                
+                    #     for outcome in (:NO, :YES)
+                    #         MarketData[slug].pool[outcome] += amount
+                    #     end
+        
+                    #     MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
+        
+                    #     # MarketData[slug].isResolved = bet.probAfter
+                    #     # MarketData[slug].closeTime = bet.probAfter
+                    # end
+
+                    getMarkets!(MarketData, [slug]) # Need to fetch to deal with liquidity
+                    MarketData[slug].probability = executedBet.probAfter # if prob changed, we don't want to update otherwise we wont arb again.
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
 
