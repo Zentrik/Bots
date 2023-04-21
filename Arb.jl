@@ -718,6 +718,18 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
+                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    botData.balance = getUserByUsername(botData.USERNAME).balance
+                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
+                    timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
+                    sleep(timeTo8)
+                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    botData.balance = getUserByUsername(botData.USERNAME).balance
+                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
+                    timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
+                    sleep(timeTo8)
                 end
             end
         catch err
