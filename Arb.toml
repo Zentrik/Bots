@@ -321,7 +321,8 @@ USERNAME = "Bot"
 [GROUPS."Destiny Subs end of Year"]
 "https://manifold.markets/MagniorBjornsson/will-destiny-reach-1000000-subscrib" = ["YES", "NO"]
 "https://manifold.markets/Fyterian/will-destiny-reach-1m-subscribers-o" = ["YES", "NO"]
-"https://manifold.markets/JoJoMango/will-destiny-get-more-then-1-millio" = ["YES", "NO"]
+#### UNLISTED
+# "https://manifold.markets/JoJoMango/will-destiny-get-more-then-1-millio" = ["YES", "NO"]
 
 [GROUPS."McCarthy"]
 "https://manifold.markets/kolotom99/american-politics-2023-kevin-mccart" = ["YES", "YES", "NO"]

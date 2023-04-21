@@ -230,9 +230,13 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 end
 
 function updateMarketData!(MarketData, market)
-    MarketData.probability = market.prob
+    # MarketData.probability = market.prob  # this updates slowly?
+
     MarketData.p = market.p # can change if a subsidy is given
     MarketData.pool = market.pool
+
+    MarketData.probability = poolToProb(MarketData.p, MarketData.pool)
+
     MarketData.id = market.id
     MarketData.question = market.question
     MarketData.url = "https://manifold.markets/$(market.creatorUsername)/$(market.slug)"
