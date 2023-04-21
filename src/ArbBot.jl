@@ -5,6 +5,8 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
+not_ArbBot_message_filter(log) = log._module === ArbBot
+
 const FEE = 0.03
 Base.exit_on_sigint(false)
 
@@ -240,8 +242,6 @@ function updateMarketData!(MarketData, market)
     MarketData.pool = market.pool
 
     MarketData.probability = poolToProb(MarketData.p, MarketData.pool)
-    println(market.slug)
-    println(MarketData.probability)
 
     MarketData.id = market.id
     MarketData.question = market.question
@@ -509,14 +509,16 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     end
 end
 
-function arb(bet, GroupData, BotData, MarketData, Arguments)
-    marketId = bet.contractId
+function arb(market, GroupData, BotData, MarketData, Arguments)
+    marketId = market.id
     slug = GroupData.contractIdToSlug[marketId]
+    newProb = poolToProb(market.p, market.pool) 
 
-	if marketId in GroupData.contractIdSet && MarketData[slug].probability ≉ bet.probAfter && bet.userUsername != BotData.USERNAME  
-        MarketData[slug].probability = bet.probAfter # prevents this code trigerring if the same bet is fedthrough, doesn't matter that we fetch true prob later as due to async the if check happens before that.
-        println(slug)
-        println("bet $(bet.probAfter)")
+	if marketId in GroupData.contractIdSet && MarketData[slug].probability ≉ newProb # && bet.userUsername != BotData.USERNAME 
+        MarketData[slug].probability = newProb # prevents this code trigerring if the same bet is fedthrough, doesn't matter that we fetch true prob later as due to async the if check happens before that.
+        @warn slug
+        @warn "from pool $newProb"
+        @warn "from prob $(market.prob)"
 
         group = GroupData.groups[GroupData.contractIdToGroupIndex[marketId]]
 
@@ -539,8 +541,8 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
                 #     # Needed as we need to update p and pool after betting
                 #     @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
                 # end
-                @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
                 rerun = arbitrageGroup(group, BotData, MarketData, Arguments)
+                @debug rerun
             catch err
                 bt = catch_backtrace()
                 println()
@@ -648,8 +650,6 @@ function setup(groupNames, live, confirmBets)
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
-    global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Info)))
-
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
 
     if !skip
@@ -672,11 +672,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
 
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
-        println("Opened Socket")
-        println(socket)
-        # send(socket, pushJSON("contracts", "live-contracts"))
-        send(socket, pushJSON("contract_bets"))
-        println("Sent Intialisation")
+        @info "Opened Socket"
+        @debug socket
+        send(socket, pushJSON("contracts", "live-contracts"))
+        # send(socket, pushJSON("contract_bets"))
+        @info "Sent Intialisation"
     
         try
             @sync begin
@@ -687,7 +687,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         if :payload in keys(msgJSON) && :data in keys(msgJSON.payload)
                             # println("Received message: $(msgJSON.payload.data.record.data.userUsername)")
                             try
-                                marketId = msgJSON.payload.data.record.data.contractId
+                                marketId = msgJSON.payload.data.record.data.id
                             
                                 if marketId in groupData.contractIdSet && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
                                     TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
@@ -702,7 +702,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 rethrow(err)
                             end
                         else
-                            println(msg)
+                            @info msg
                         end
                     end)
                 end
@@ -749,8 +749,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
             println("Finally Caught")
             if !WebSockets.isclosed(socket)
-                send(socket, leaveJSON())
-                # send(socket, leaveJSON("live-contracts"))
+                # send(socket, leaveJSON())
+                send(socket, leaveJSON("live-contracts"))
                 println("Left Channel in catch")
     
                 msg = receive(socket)
@@ -778,7 +778,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 end
 
 function test(groupNames = nothing; live=false, confirmBets=true, skip=false) 
-    global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
     production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
 end
 
@@ -810,11 +809,10 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=fals
     end
 end
 
-# Need to run manually in repl?
-not_ArbBot_message_filter(log) = log._module === ArbBot
-global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
+# Need to run manually?
+global_logger(EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
 
-function test2()
+function testLogging()
     @info("You won't see this")
     @warn("won't see this either")
     @error("You will only see this")

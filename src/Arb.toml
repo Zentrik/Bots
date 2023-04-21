@@ -1,13 +1,13 @@
 SUPABASE_APIKEY= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg"
 
-APIKEY = "057fa467-501a-47b8-9b23-36041d1a8388"
-USERNAME = "Bot"
+# APIKEY = "057fa467-501a-47b8-9b23-36041d1a8388"
+# USERNAME = "Bot"
 
 # APIKEY = "218fc836-c568-4e88-b12a-eaef0f538431"
 # USERNAME = "NeonNuke"
 
-# APIKEY = "c7d5892e-6277-43d9-99fa-6c36b40d3f50"
-# USERNAME = "BottieMcBotface"
+APIKEY = "c7d5892e-6277-43d9-99fa-6c36b40d3f50"
+USERNAME = "BottieMcBotface"
 
 [GROUPS."Isaac Trustworthiness"] # in Jan, not in Jan, none
 "https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO", "NO"]
