@@ -646,13 +646,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
-        @info "Opened Socket"
-        @debug socket
-        send(socket, pushJSON("contracts", "live-contracts"))
-        # send(socket, pushJSON("contract_bets"))
-        @info "Sent Intialisation"
-    
         try
+            @info "Opened Socket"
+            @debug socket
+            send(socket, pushJSONContracts())
+            # send(socket, pushJSON("contract_bets"))
+            @info "Sent Intialisation"
+    
             @sync try
                 #Reading messages
                 @async_showerr for msg in socket
@@ -833,7 +833,7 @@ function testLogging()
     try 
         @smart_assert 1 != 1
     catch err
-        @error "Something went wrong" exception = (e, catch_backtrace())
+        @error "Something went wrong" exception = (err, catch_backtrace())
         # rethrow(err)
     end
 end
