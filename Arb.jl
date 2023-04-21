@@ -236,6 +236,8 @@ function updateMarketData!(MarketData, market)
     MarketData.pool = market.pool
 
     MarketData.probability = poolToProb(MarketData.p, MarketData.pool)
+    println(market.slug)
+    println(MarketData.probability)
 
     MarketData.id = market.id
     MarketData.question = market.question
@@ -517,6 +519,8 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
 
 	if marketId in GroupData.contractIdSet && MarketData[slug].probability ≉ bet.probAfter && bet.userUsername != BotData.USERNAME  
         MarketData[slug].probability = bet.probAfter # prevents this code trigerring if the same bet is fedthrough, doesn't matter that we fetch true prob later as due to async the if check happens before that.
+        println(slug)
+        println("bet $(bet.probAfter)")
 
         group = GroupData.groups[GroupData.contractIdToGroupIndex[marketId]]
 
@@ -532,13 +536,14 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
             printstyled("Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))\n", color=:light_cyan)
 
             try
-                if rerun == :FirstRun
-                    # @time "Get Market" getMarketsUsingId!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
-                    @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
-                else
-                    # Needed as we need to update p and pool after betting
-                    @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
-                end
+                # if rerun == :FirstRun
+                #     # @time "Get Market" getMarketsUsingId!(MarketData, [slug]) # function takes in a vector of slugs, otherwise iterates over characters of slug
+                #     @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
+                # else
+                #     # Needed as we need to update p and pool after betting
+                #     @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
+                # end
+                @time "Get All Markets" getMarketsUsingId!(MarketData, group.slugs)
                 rerun = arbitrageGroup(group, BotData, MarketData, Arguments)
             catch err
                 bt = catch_backtrace()
@@ -671,6 +676,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
         println("Opened Socket")
         println(socket)
     
+        # send(socket, pushJSON("contracts", "live-contracts"))
         send(socket, pushJSON("contract_bets"))
         println("Sent Intialisation")
     
@@ -681,6 +687,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                     @async begin
                         msgJSON = JSON3.read(msg)
                         if :payload in keys(msgJSON) && :data in keys(msgJSON.payload)
+                            # println("Received message: $(msgJSON.payload.data.record.data.userUsername)")
                             try
                                 marketId = msgJSON.payload.data.record.data.contractId
                             
@@ -706,27 +713,27 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                 @async while !WebSockets.isclosed(socket)
                     printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     send(socket, heartbeatJSON)
-                    printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     sleep(30)
                 end
 
                 # Fetch new balance at 8am
                 @async while !WebSockets.isclosed(socket)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
-                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
                     printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
-                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
                     printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
-                    printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
@@ -745,6 +752,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
             println("Finally Caught")
             if !WebSockets.isclosed(socket)
                 send(socket, leaveJSON())
+                # send(socket, leaveJSON("live-contracts"))
                 println("Left Channel in catch")
     
                 msg = receive(socket)
