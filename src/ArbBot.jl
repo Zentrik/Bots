@@ -1,6 +1,9 @@
+module ArbBot
+
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters
 using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
+using SmartAsserts, Logging, LoggingExtras
 
 const FEE = 0.03
 Base.exit_on_sigint(false)
@@ -58,7 +61,6 @@ end
 @with_kw struct Arguments @deftype Bool
     live=false
     confirmBets=true
-    printDebug=true
 end
 
 struct PlannedBet
@@ -76,6 +78,8 @@ function execute(bet, APIKEY)
     ohno = false
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
+
+    @smart_assert bet.outcome == response.outcome
 
     if response.shares ≉ bet.shares
         io = IOBuffer()
@@ -262,7 +266,6 @@ function getMarkets!(MarketData, slugs)
             bt = catch_backtrace()
             println()
             showerror(stderr, err, bt)
-            println(contract)
             throw(err)
         end
     end
@@ -271,13 +274,13 @@ end
 function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri is too long
     try
         for slug in slugs
-            @assert !isnothing(MarketData[slug].id)
+            @smart_assert !isnothing(MarketData[slug].id)
         end
         
         contracts_ids = join(map(slug -> MarketData[slug].id, slugs), ",") # might be faster to index by id
         # contracts_slugs = join(slugs, ",")
 
-        @assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
+        @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
 
@@ -339,33 +342,25 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     newYesShares = yesShares .- oldYesShares
     newNoShares = noShares  .- oldNoShares
 
-    if Arguments.printDebug
-        printstyled("=== $(group.name) ===\n", color=:bold)
-        printedGroupName = true
+    printstyled("=== $(group.name) ===\n", color=:bold)
+    printedGroupName = true
 
-        println(bettableSlugsIndex)
-        println()
-        println(oldProb)
-        println(newProb)
-        println()
-        println(oldProfitsByEvent)
-        println(newProfitsByEvent)
-        println(profit)
-        println()
-        println(betAmounts)
-        println()
-        println(group.y_matrix)
-        println(group.n_matrix)
-        println()
-        println(map(slug -> MarketData[slug].Shares[:YES], group.slugs))
-        println(map(slug -> MarketData[slug].Shares[:NO], group.slugs))
-        println(yesShares)
-        println(noShares)
-        println(group.y_matrix * yesShares)
-        println(group.n_matrix * noShares)
-        println(sum(abs.(betAmounts)))
-        println()
-    end
+    @debug bettableSlugsIndex
+    @debug oldProb
+    @debug newProb
+    @debug oldProfitsByEvent
+    @debug newProfitsByEvent
+    @debug profit
+    @debug betAmounts
+    @debug group.y_matrix
+    @debug group.n_matrix
+    @debug map(slug -> MarketData[slug].Shares[:YES], group.slugs)
+    @debug map(slug -> MarketData[slug].Shares[:NO], group.slugs)
+    @debug yesShares
+    @debug noShares
+    @debug group.y_matrix * yesShares
+    @debug group.n_matrix * noShares
+    @debug sum(abs.(betAmounts))
 
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
@@ -383,6 +378,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
+            @smart_assert sign(amount) == sign(newProb[j] - oldProb[i])
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
         else
@@ -549,7 +545,7 @@ function arb(bet, GroupData, BotData, MarketData, Arguments)
                 bt = catch_backtrace()
                 println()
                 showerror(stderr, err, bt)
-                rethrow()
+                rethrow(errr)
             end
             runs += 1
         end
@@ -568,7 +564,7 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         # https://discourse.julialang.org/t/broadcast-object-property/47104/6
         contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
 
-        @assert length(MarketDataBySlug) < 1000
+        @smart_assert length(MarketDataBySlug) < 1000
         # will fail if we have more than 1000
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
@@ -620,8 +616,8 @@ function readData()
     return GROUPS, APIKEY, Supabase_APIKEY, USERNAME
 end
 
-function setup(groupNames, live, confirmBets, printDebug)
-    arguments = Arguments(live, confirmBets, printDebug)
+function setup(groupNames, live, confirmBets)
+    arguments = Arguments(live, confirmBets)
 
     GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
 
@@ -651,8 +647,10 @@ function setup(groupNames, live, confirmBets, printDebug)
     return groupData, botData, marketDataBySlug, arguments
 end
 
-function production(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
-    groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets, printDebug)
+function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
+    global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Info)))
+
+    groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
 
     if !skip
         for group in groupData.groups
@@ -672,10 +670,10 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
 
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
+
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
         println("Opened Socket")
         println(socket)
-    
         # send(socket, pushJSON("contracts", "live-contracts"))
         send(socket, pushJSON("contract_bets"))
         println("Sent Intialisation")
@@ -684,7 +682,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
             @sync begin
                 #Reading messages
                 @async for msg in socket
-                    @async begin
+                    errormonitor(@async begin
                         msgJSON = JSON3.read(msg)
                         if :payload in keys(msgJSON) && :data in keys(msgJSON.payload)
                             # println("Received message: $(msgJSON.payload.data.record.data.userUsername)")
@@ -706,19 +704,19 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                         else
                             println(msg)
                         end
-                    end
+                    end)
                 end
     
                 # HeartBeat
-                @async while !WebSockets.isclosed(socket)
+                errormonitor(@async while !WebSockets.isclosed(socket)
                     printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     send(socket, heartbeatJSON)
                     # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     sleep(30)
-                end
+                end)
 
                 # Fetch new balance at 8am
-                @async while !WebSockets.isclosed(socket)
+                errormonitor(@async while !WebSockets.isclosed(socket)
                     printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
@@ -737,7 +735,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
                     timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                end
+                end)
             end
         catch err
             if err isa InterruptException
@@ -779,15 +777,18 @@ function production(groupNames = nothing; live=true, confirmBets=false, printDeb
     end
 end
 
-test(groupNames = nothing; live=false, confirmBets=true, printDebug=true, skip=false) = production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
+function test(groupNames = nothing; live=false, confirmBets=true, skip=false) 
+    global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
+    production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
+end
 
-function retryProd(groupNames = nothing; live=true, confirmBets=false, printDebug=false, skip=false)
+function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=false)
     delay = 60
     lastRunTime = time()
 
     while true
         try
-            production(groupNames; live=live, confirmBets=confirmBets, printDebug=printDebug, skip=skip)
+            production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch err
             bt = catch_backtrace()
             println()
@@ -807,6 +808,17 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, printDebu
             lastRunTime = time()
         end
     end
+end
+
+# Need to run manually in repl?
+not_ArbBot_message_filter(log) = log._module === ArbBot
+global_logger(EarlyFilteredLogger(not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
+
+function test2()
+    @info("You won't see this")
+    @warn("won't see this either")
+    @error("You will only see this")
+    @debug "test"
 end
 
 # https://github.com/innerlee/PrintLog.jl
@@ -852,4 +864,6 @@ macro noprintlog(silent=false)
     silent != :silent &&
         @info("`print`, `println` and `printstyled` are resumed.")
     nothing
+end
+
 end
