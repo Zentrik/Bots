@@ -1,6 +1,6 @@
 module ArbBot
 
-using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Suppressor, Parameters
+using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Parameters
 using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
@@ -13,8 +13,9 @@ macro async_showerr(ex)
             eval($ex)
         catch err
             bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
+            # println()
+            # showerror(stderr, err, bt)
+            @error "Something went wrong" exception = (e, bt)
             rethrow()
         end
     end)
@@ -97,7 +98,7 @@ function execute(bet, currentProb, APIKEY)
     try 
         @smart_assert bet.outcome == response.outcome
     catch err
-        @error err.msg
+        @error "Something went wrong" exception = (e, catch_backtrace())
         rethrow(err)
     end
 
@@ -111,7 +112,7 @@ function execute(bet, currentProb, APIKEY)
         try 
             @smart_assert !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
         catch err
-            @error err.msg
+            @error "Something went wrong" exception = (e, catch_backtrace())
             rethrow(err)
         end
     end
@@ -236,6 +237,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     
 
     if bestSolution == repeat([0.], length(bettableSlugsIndex))
+        yield()
         @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3)
 
         nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
@@ -293,7 +295,7 @@ function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri
             try 
                 @smart_assert !isnothing(MarketData[slug].id)
             catch err
-                @error err.msg
+                @error "Something went wrong" exception = (e, catch_backtrace())
                 rethrow(err)
             end
         end
@@ -304,7 +306,7 @@ function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri
         try 
             @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
         catch err
-            @error err.msg
+            @error "Something went wrong" exception = (e, catch_backtrace())
             rethrow(err)
         end
 
@@ -349,8 +351,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     plannedBets = PlannedBet[]
 
-    printedGroupName = false
-
     maxBetAmount = BotData.balance / (2 + 1.5*group.noMarkets)
     redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
     maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
@@ -368,9 +368,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     profit = minimum(newProfitsByEvent) - minimum(oldProfitsByEvent)
     newYesShares = yesShares .- oldYesShares
     newNoShares = noShares  .- oldNoShares
-
-    @info "=== $(group.name) ==="
-    printedGroupName = true
 
     @debug bettableSlugsIndex
     @debug oldProb
@@ -408,20 +405,16 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             end
 
             try 
-                @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].limitOrders[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
+                @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].sortedLimitProbs[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
             catch err
-                @error err.msg
+                @error "Something went wrong" exception = (e, catch_backtrace())
                 rethrow(err)
             end
             
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
         else
-            if !printedGroupName
-                @info "=== $(group.name) ==="
-                # printedGroupName = true
-                rerun = :BetMore
-            end
+            # rerun = :BetMore
             @warn "Bet amount: $(amount) is too small, $(slug)"
 
             rerun = :Success
@@ -454,26 +447,16 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             rerun = :BetMore
         end
 
-        if !printedGroupName
-            @info "=== $(group.name) ==="
-            printedGroupName = true
-        end
-
-        @warn "\e]8;;$(MarketData[slug].url)\e\\$(MarketData[slug].question)\e]8;;\e\\" # hyperlink
+        @info "\e]8;;$(MarketData[slug].url)\e\\$(MarketData[slug].question)\e]8;;\e\\" # hyperlink
         @info "Prior probs:     $(MarketData[slug].probability * 100)%"
         @info "Posterior probs: $(newProbBySlug[slug]*100)%"
-        @warn "Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)"
+        @info "Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)"
     end
 
     if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100
         @error "Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
         rerun = :Success
         return rerun
-    end
-
-    if !printedGroupName
-        @info "=== $(group.name) ==="
-        printedGroupName = true
     end
 
     @info "Profits:         $(profit + FEE * length(plannedBets))\n" # no more fee, but we still want to use fee in optimisation
@@ -556,7 +539,7 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         try 
             @smart_assert length(MarketDataBySlug) < 1000
         catch err
-            @error err.msg
+            @error "Something went wrong" exception = (e, catch_backtrace())
             rethrow(err)
         end
         # will fail if we have more than 1000
@@ -670,7 +653,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
         @info "Sent Intialisation"
     
         try
-            @sync begin
+            @sync try
                 #Reading messages
                 @async_showerr for msg in socket
                     @async_showerr begin 
@@ -682,13 +665,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                         market = msgJSON.payload.data.record.data
                         marketId = market.id
-                        @debug market.slug
+                        # @debug market.slug
                     
                         if marketId in groupData.contractIdSet 
                             try 
                                 @smart_assert market.mechanism == "cpmm-1"
                             catch err
-                                @error err.msg
+                                @error "Something went wrong" exception = (e, catch_backtrace())
                                 rethrow(err)
                             end
 
@@ -723,15 +706,15 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                         delay *= 5
                                     end 
                                     if rerun != :FirstRun
-                                        wait(0.1) # Hack to get new data
+                                        sleep(0.1) # Hack to get new data
                                         # maybe yield() works
                                     end
 
                                     # This is so any updates to the market are applied before we optimise, realistically this only matters is we need to rerun and so while we wait for POST of bets we can fetch any changes.
                                     yield()
             
-                                    printstyled("Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))\n", color=:light_cyan)
-                                    @info "current prob $(marketDataBySlug[slug].probability)"
+                                    @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                                    @debug "current prob $(marketDataBySlug[slug].probability)"
                                     @debug [marketDataBySlug[slug].p for slug in group.slugs]
                                     @debug [marketDataBySlug[slug].pool for slug in group.slugs]
                                     runs += 1
@@ -779,6 +762,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
                 end
+            catch err
+                bt = catch_backtrace()
+                println()
+                showerror(stderr, err, bt)
+                rethrow(err)
             end
         catch err
             if err isa InterruptException
@@ -845,7 +833,7 @@ function testLogging()
     try 
         @smart_assert 1 != 1
     catch err
-        @error err.msg
+        @error "Something went wrong" exception = (e, catch_backtrace())
         # rethrow(err)
     end
 end
@@ -857,7 +845,7 @@ timestamp_logger(logger) = TransformerLogger(logger) do log
 end
 const DIR = "H:\\Code\\ManifoldMarkets.jl\\ArbBot\\src\\logs"
 global_logger(TeeLogger(
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)), 
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Info)), 
     EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
     EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
