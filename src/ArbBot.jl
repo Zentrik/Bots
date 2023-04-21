@@ -676,7 +676,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     @async_showerr begin 
                         msgJSON = JSON3.read(msg)
                         if !(:payload in keys(msgJSON) && :data in keys(msgJSON.payload))
-                            @info "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
+                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
                             return nothing
                         end
 
@@ -858,9 +858,9 @@ end
 const DIR = "H:\\Code\\ManifoldMarkets.jl\\ArbBot\\src\\logs"
 global_logger(TeeLogger(
     EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)), 
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"YYYY-mm-dd.\l\o\g"), Logging.Info)),
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"\D\e\b\u\g\-YYYY-mm-dd.\l\o\g"), Logging.Debug)),
-    timestamp_logger(MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"\V\e\r\b\o\s\e\-YYYY-mm-dd.\l\o\g"), Logging.Debug))
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
+    timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
 ))
 ArbBot.testLogging()
 end
