@@ -813,9 +813,13 @@ end
 
 # Need to run manually?
 # using Logging, LoggingExtras, Dates
+timestamp_logger(logger) = TransformerLogger(logger) do log
+    merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS")) $(log.message)"))
+end
 global_logger(TeeLogger(
     EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)), 
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$(@__DIR__)/$(Dates.format(now(), "dd-mmTHH-MM")).log"), Logging.Debug))
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(@__DIR__, raw"YYYY-mm-dd.\l\o\g"), Logging.Debug)),
+    timestamp_logger(MinLevelLogger(DatetimeRotatingFileLogger(@__DIR__, raw"\V\e\r\b\o\s\e-YYYY-mm-dd.\l\o\g");, Logging.Debug))
 ))
 ArbBot.testLogging()
 end
