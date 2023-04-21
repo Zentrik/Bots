@@ -363,6 +363,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     @debug group.y_matrix * yesShares
     @debug group.n_matrix * noShares
     @debug sum(abs.(betAmounts))
+    @debug [MarketData[slug].p for slug in getSlugs(group)]
+    @debug [MarketData[slug].pool for slug in getSlugs(group)]
 
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
@@ -445,7 +447,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     printstyled("Profits:         $(profit + FEE * length(plannedBets))\n", color=:yellow) # no more fee, but we still want to use fee in optimisation
 
-    @sync if Arguments.confirmBets
+    if Arguments.confirmBets
         println("Proceed? (y/n)") 
         if readline() !="y"
             rerun = :Success
@@ -602,6 +604,19 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
+macro async_showerr(ex)
+    esc(quote
+        @async try
+            eval($ex)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+            rethrow()
+        end
+    end)
+end
+
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
 
@@ -633,16 +648,17 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
         try
             @sync begin
                 #Reading messages
-                @async for msg in socket
-                    @async try 
+                @async_showerr for msg in socket
+                    @async_showerr begin 
                         msgJSON = JSON3.read(msg)
                         if !(:payload in keys(msgJSON) && :data in keys(msgJSON.payload))
-                            @info msg
+                            @info "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
                             return nothing
                         end
 
                         market = msgJSON.payload.data.record.data
                         marketId = market.id
+                        # @warn market.slug
                     
                         if marketId in groupData.contractIdSet 
                             @smart_assert market.mechanism == "cpmm-1"
@@ -654,9 +670,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                             # println("Received message: $(market.lastBetTime)")
                             # @warn slug
-                            @warn "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                            # @warn "from prob $(market.prob)"
-                            
+                            # if marketDataBySlug[slug].probability ≉ oldProb 
+                            #     @warn "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                            # # @warn "from prob $(market.prob)"
+                            # end
+
                             if marketDataBySlug[slug].probability ≉ oldProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
                                 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
@@ -685,6 +703,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             
                                     printstyled("Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))\n", color=:light_cyan)
                                     @info "current prob $(marketDataBySlug[slug].probability)"
+                                    @debug [marketDataBySlug[slug].p for slug in getSlugs(group)]
+                                    @debug [marketDataBySlug[slug].pool for slug in getSlugs(group)]
                                     runs += 1
                                     rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
                                     @debug rerun
@@ -698,17 +718,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         end
 
                         return nothing
-                    catch err
-                        bt = catch_backtrace()
-                        println()
-                        showerror(stderr, err, bt)
-                        rethrow(err)
                     end
                 end
     
                 # HeartBeat
                 errormonitor(@async while !WebSockets.isclosed(socket)
-                    printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    # printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     send(socket, heartbeatJSON)
                     # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     sleep(30)
