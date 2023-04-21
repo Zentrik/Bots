@@ -5,7 +5,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-not_ArbBot_message_filter(log) = log._module === ArbBot
+not_ArbBot_message_filter(log) = log._module === ArbBot || log._module === Main
 
 macro async_showerr(ex)
     esc(quote
@@ -94,20 +94,26 @@ function execute(bet, currentProb, APIKEY)
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
 
-    @smart_assert bet.outcome == response.outcome
+    try 
+        @smart_assert bet.outcome == response.outcome
+    catch err
+        @error err.msg
+        rethrow(err)
+    end
 
     if response.shares ≉ bet.shares
-        io = IOBuffer()
-
-        printstyled("\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n", color=:green) # hyperlink
-        println(io, response)
-        println(io, response.fills)
-
-        write(stdout, take!(io));
+        @error "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n" # hyperlink
+        @error response
+        @error response.fills
 
         ohno = true
 
-        @smart_assert !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
+        try 
+            @smart_assert !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
+        catch err
+            @error err.msg
+            rethrow(err)
+        end
     end
 
     return response, ohno
@@ -284,13 +290,24 @@ end
 function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri is too long
     try
         for slug in slugs
-            @smart_assert !isnothing(MarketData[slug].id)
+            try 
+                @smart_assert !isnothing(MarketData[slug].id)
+            catch err
+                @error err.msg
+                rethrow(err)
+            end
         end
         
         contracts_ids = join(map(slug -> MarketData[slug].id, slugs), ",") # might be faster to index by id
         # contracts_slugs = join(slugs, ",")
 
-        @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
+        try 
+            @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
+        catch err
+            @error err.msg
+            rethrow(err)
+        end
+
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
 
@@ -352,7 +369,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     newYesShares = yesShares .- oldYesShares
     newNoShares = noShares  .- oldNoShares
 
-    printstyled("=== $(group.name) ===\n", color=:bold)
+    @info "=== $(group.name) ==="
     printedGroupName = true
 
     @debug bettableSlugsIndex
@@ -390,16 +407,22 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
-            @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].limitOrders[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
+            try 
+                @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].limitOrders[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
+            catch err
+                @error err.msg
+                rethrow(err)
+            end
+            
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
         else
             if !printedGroupName
-                printstyled("=== $(group.name) ===\n", color=:bold)
+                @info "=== $(group.name) ==="
                 # printedGroupName = true
                 rerun = :BetMore
             end
-            println("Bet amount: $(amount) is too small, $(slug)")
+            @warn "Bet amount: $(amount) is too small, $(slug)"
 
             rerun = :Success
             return rerun
@@ -420,40 +443,40 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         bet = plannedBets[i]
 
         if abs(amount) >= .98 * maxBetAmount
-            printstyled("Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount\n", color=:orange)
+            @warn "Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount"
             # bindingConstraint = true
             rerun = :BetMore
         end
 
         if abs(amount) ≈ 1
-            printstyled("Bet size is $(abs(amount))\n", color=:orange)
+            @warn "Bet size is $(abs(amount))"
             # bindingConstraint = true
             rerun = :BetMore
         end
 
         if !printedGroupName
-            printstyled("=== $(group.name) ===\n", color=:bold)
+            @info "=== $(group.name) ==="
             printedGroupName = true
         end
 
-        printstyled("\e]8;;$(MarketData[slug].url)\e\\$(MarketData[slug].question)\e]8;;\e\\\n", color=:red) # hyperlink
-        println("Prior probs:     $(MarketData[slug].probability * 100)%")
-        println("Posterior probs: $(newProbBySlug[slug]*100)%")
-        printstyled("Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)\n", color=:green)
+        @warn "\e]8;;$(MarketData[slug].url)\e\\$(MarketData[slug].question)\e]8;;\e\\" # hyperlink
+        @info "Prior probs:     $(MarketData[slug].probability * 100)%"
+        @info "Posterior probs: $(newProbBySlug[slug]*100)%"
+        @warn "Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)"
     end
 
     if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100
-        println("Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets)).")
+        @error "Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
         rerun = :Success
         return rerun
     end
 
     if !printedGroupName
-        printstyled("=== $(group.name) ===\n", color=:bold)
+        @info "=== $(group.name) ==="
         printedGroupName = true
     end
 
-    printstyled("Profits:         $(profit + FEE * length(plannedBets))\n", color=:yellow) # no more fee, but we still want to use fee in optimisation
+    @info "Profits:         $(profit + FEE * length(plannedBets))\n" # no more fee, but we still want to use fee in optimisation
 
     if Arguments.confirmBets
         println("Proceed? (y/n)") 
@@ -530,7 +553,12 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         # https://discourse.julialang.org/t/broadcast-object-property/47104/6
         contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
 
-        @smart_assert length(MarketDataBySlug) < 1000
+        try 
+            @smart_assert length(MarketDataBySlug) < 1000
+        catch err
+            @error err.msg
+            rethrow(err)
+        end
         # will fail if we have more than 1000
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
@@ -657,7 +685,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         @debug market.slug
                     
                         if marketId in groupData.contractIdSet 
-                            @smart_assert market.mechanism == "cpmm-1"
+                            try 
+                                @smart_assert market.mechanism == "cpmm-1"
+                            catch err
+                                @error err.msg
+                                rethrow(err)
+                            end
 
                             slug = groupData.contractIdToSlug[marketId] #market.slug also works
                             oldProb = marketDataBySlug[slug].probability
@@ -809,17 +842,25 @@ function testLogging()
     @warn("won't see this either")
     @error("You will only see this")
     @debug "test"
+    try 
+        @smart_assert 1 != 1
+    catch err
+        @error err.msg
+        # rethrow(err)
+    end
 end
 
 # Need to run manually?
-# using Logging, LoggingExtras, Dates
+using Logging, LoggingExtras, Dates
 timestamp_logger(logger) = TransformerLogger(logger) do log
     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS")) $(log.message)"))
 end
+const DIR = "H:\\Code\\ManifoldMarkets.jl\\ArbBot\\src\\logs"
 global_logger(TeeLogger(
     EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)), 
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(@__DIR__, raw"YYYY-mm-dd.\l\o\g"), Logging.Debug)),
-    timestamp_logger(MinLevelLogger(DatetimeRotatingFileLogger(@__DIR__, raw"\V\e\r\b\o\s\e-YYYY-mm-dd.\l\o\g");, Logging.Debug))
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"YYYY-mm-dd.\l\o\g"), Logging.Info)),
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"\D\e\b\u\g\-YYYY-mm-dd.\l\o\g"), Logging.Debug)),
+    timestamp_logger(MinLevelLogger(DatetimeRotatingFileLogger(DIR, raw"\V\e\r\b\o\s\e\-YYYY-mm-dd.\l\o\g"), Logging.Debug))
 ))
 ArbBot.testLogging()
 end
