@@ -7,6 +7,19 @@ using SmartAsserts, Logging, LoggingExtras
 
 not_ArbBot_message_filter(log) = log._module === ArbBot
 
+macro async_showerr(ex)
+    esc(quote
+        @async try
+            eval($ex)
+        catch err
+            bt = catch_backtrace()
+            println()
+            showerror(stderr, err, bt)
+            rethrow()
+        end
+    end)
+end
+
 const FEE = 0.03
 Base.exit_on_sigint(false)
 
@@ -255,7 +268,7 @@ end
 
 function getMarkets!(MarketData, slugs)
     @sync for paritionedSlugs in Iterators.partition(slugs, 20) # 2000 is max characters in uri, so we have about 1900 for slugs, max slug is about 50 : 1900/50 is 38. generous magin to 20
-        @async try
+        @async_showerr begin
             contracts_slugs = join(paritionedSlugs, ",")
     
             response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?slug=in.($contracts_slugs)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
@@ -264,11 +277,6 @@ function getMarkets!(MarketData, slugs)
             for contract in responseJSON
                 updateMarketData!(MarketData[contract.slug], contract.data)
             end
-        catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
-            throw(err)
         end
     end
 end
@@ -363,8 +371,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     @debug group.y_matrix * yesShares
     @debug group.n_matrix * noShares
     @debug sum(abs.(betAmounts))
-    @debug [MarketData[slug].p for slug in getSlugs(group)]
-    @debug [MarketData[slug].pool for slug in getSlugs(group)]
+    @debug [MarketData[slug].p for slug in group.slugs]
+    @debug [MarketData[slug].pool for slug in group.slugs]
 
     for (i, j) in enumerate(bettableSlugsIndex)
         amount = betAmounts[i]
@@ -460,7 +468,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
         @sync try 
             for bet in plannedBets 
-                @async begin
+                @async_showerr begin
                     slug = urlToSlug(bet.url)
 
                     # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
@@ -505,6 +513,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             println()
             showerror(stderr, err, bt)
 
+            # What if a bet didn't go througth, thus we must fetch
             fetchMyShares!(marketDataBySlug, BotData.USERID)
 
             rerun = :PostFailure
@@ -604,19 +613,6 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
-macro async_showerr(ex)
-    esc(quote
-        @async try
-            eval($ex)
-        catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
-            rethrow()
-        end
-    end)
-end
-
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
 
@@ -658,7 +654,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                         market = msgJSON.payload.data.record.data
                         marketId = market.id
-                        # @warn market.slug
+                        @debug market.slug
                     
                         if marketId in groupData.contractIdSet 
                             @smart_assert market.mechanism == "cpmm-1"
@@ -670,10 +666,10 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                             # println("Received message: $(market.lastBetTime)")
                             # @warn slug
-                            # if marketDataBySlug[slug].probability ≉ oldProb 
-                            #     @warn "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                            # # @warn "from prob $(market.prob)"
-                            # end
+                            if marketDataBySlug[slug].probability ≉ oldProb 
+                                @debug "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                            # @warn "from prob $(market.prob)"
+                            end
 
                             if marketDataBySlug[slug].probability ≉ oldProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
                                 
@@ -693,18 +689,18 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                         sleep(delay)
                                         delay *= 5
                                     end 
-                                    # if rerun != :FirstRun
-                                    #     wait(0.1) # Hack to get new data
-                                    #     # maybe yield() works
-                                    # end
+                                    if rerun != :FirstRun
+                                        wait(0.1) # Hack to get new data
+                                        # maybe yield() works
+                                    end
 
                                     # This is so any updates to the market are applied before we optimise, realistically this only matters is we need to rerun and so while we wait for POST of bets we can fetch any changes.
                                     yield()
             
                                     printstyled("Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))\n", color=:light_cyan)
                                     @info "current prob $(marketDataBySlug[slug].probability)"
-                                    @debug [marketDataBySlug[slug].p for slug in getSlugs(group)]
-                                    @debug [marketDataBySlug[slug].pool for slug in getSlugs(group)]
+                                    @debug [marketDataBySlug[slug].p for slug in group.slugs]
+                                    @debug [marketDataBySlug[slug].pool for slug in group.slugs]
                                     runs += 1
                                     rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
                                     @debug rerun
@@ -722,15 +718,15 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 end
     
                 # HeartBeat
-                errormonitor(@async while !WebSockets.isclosed(socket)
+                @async_showerr while !WebSockets.isclosed(socket)
                     # printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     send(socket, heartbeatJSON)
                     # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     sleep(30)
-                end)
+                end
 
                 # Fetch new balance at 8am
-                errormonitor(@async while !WebSockets.isclosed(socket)
+                @async_showerr while !WebSockets.isclosed(socket)
                     printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
@@ -749,7 +745,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                end)
+                end
             end
         catch err
             if err isa InterruptException
@@ -808,9 +804,6 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=fals
     end
 end
 
-# Need to run manually?
-global_logger(EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)))
-
 function testLogging()
     @info("You won't see this")
     @warn("won't see this either")
@@ -818,49 +811,11 @@ function testLogging()
     @debug "test"
 end
 
-# https://github.com/innerlee/PrintLog.jl
-"""
-    @printlog "file.log"
-Enable `printlog`.
-Outputs of `print` and `println` will be logged into file `file.log`.
-It will create the log file if it does not exist.
-All prints will be appended to the end of the file.
-    @printlog "file.log" silent
-Silent mode.
-Do not output `info`.
-"""
-macro printlog(file, silent=false)
-    file = "$(@__DIR__)/$file"
-    @eval begin
-        import Base.println, Base.print, Base.printstyled
-        @suppress Base.println(xs...) =
-            open(f -> (println(f, xs...); println(stdout, xs...)), $file, "a")
-        @suppress Base.print(xs...) =
-            open(f -> (print(f, xs...); print(stdout, xs...)), $file, "a")
-        @suppress Base.printstyled(xs...; kwargs...) =
-            open(f -> (printstyled(f, xs...; kwargs...); printstyled(stdout, xs..., ;  kwargs...)), $file, "a")
-    end
-    silent != :silent &&
-        @info("`print`, `println` and `printstyled` will be logged into file `$file`")
-    nothing
-end
-
-"""
-    @noprintlog
-Disable `printlog`.
-    @noprintlog silent
-Silent mode.
-"""
-macro noprintlog(silent=false)
-    @eval begin
-        import Base.println, Base.print, Base.printstyled
-        @suppress Base.println(xs...) = println(stdout, xs...)
-        @suppress Base.print(xs...) = print(stdout, xs...)
-        @suppress Base.printstyled(xs...; kwargs...) = printstyled(stdout, xs...; kwargs...)
-    end
-    silent != :silent &&
-        @info("`print`, `println` and `printstyled` are resumed.")
-    nothing
-end
-
+# Need to run manually?
+# using Logging, LoggingExtras, Dates
+global_logger(TeeLogger(
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Debug)), 
+    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$(@__DIR__)/$(Dates.format(now(), "dd-mmTHH-MM")).log"), Logging.Debug))
+))
+ArbBot.testLogging()
 end
