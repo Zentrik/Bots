@@ -217,7 +217,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
-    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1)
+    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3)
     yield()
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
@@ -502,6 +502,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     if Arguments.live
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
 
+        # I think we are able to fetch messages while we're making bets
         @sync try 
             for bet in plannedBets 
                 @async_showerr begin
@@ -519,6 +520,26 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                     updateShares!(MarketData[slug], executedBet, BotData)
 
                     MarketData[slug].probability = executedBet.probAfter # update otherwise we might arb again if bets are duplicated.
+
+                    # If we don't fetch new message by the time we run again, at least we have a more accurate pool
+                    if !isnothing(executedBet.fills)
+                        shares = 0.
+                        amount = 0.
+
+                        for fill in executedBet.fills
+                            if isnothing(fill.matchedBetId)
+                                shares += fill.shares
+                                amount += fill.amount
+                            end
+                        end
+
+                        for outcome in (:NO, :YES)
+                            MarketData[slug].pool[outcome] += amount
+                        end
+
+                        MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
+                    end
+
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
 
@@ -659,30 +680,12 @@ function setup(groupNames, live, confirmBets)
 end
 
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
+    # Should probably move this into the websocket as well
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
-
-    # Should do this when first connected to websocket so we get updated probabilities
-    if !skip
-        for group in groupData.groups
-            @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-
-            rerun = :FirstRun
-            runs = 0
-            
-            while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
-                if rerun != :FirstRun
-                    @time "Get All Markets" getMarketsUsingId!(marketDataBySlug, group.slugs)
-                end
-                rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
-
-                runs += 1
-            end
-        end
-    end
 
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
-    currentTask = @async nothing
+    # currentTask = @async nothing
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
         try
             @info "Opened Socket"
@@ -692,6 +695,29 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             @info "Sent Intialisation"
     
             @sync try
+                # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
+                currentTask = @async_showerr if !skip
+                    @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                    for group in groupData.groups
+                        @warn "All: Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+            
+                        rerun = :FirstRun
+                        runs = 0
+                        
+                        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
+                            if rerun != :FirstRun
+                                # @time "Get All Markets" getMarketsUsingId!(marketDataBySlug, group.slugs)
+                                sleep(0.5) # Hack
+                            end
+                            rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
+            
+                            runs += 1
+                        end
+                    end
+
+                    @warn "All: Done all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                    skip = true #hack to prevent rerun, pretty sure unnecessary
+                end
                 #Reading messages
                 # should switch to @spawn :interactive
                 @async_showerr for msg in socket
@@ -745,12 +771,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 if !istaskdone(currentTask) # only want to sleep once so just elif
                                     wait(currentTask)
                                     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    sleep(0.1) # Hack to get new data
+                                    # each bet takes about .3s from when we have got POST response to get a message from websocket
+                                    sleep(0.5) # Hack to get new data
                                 end
 
-                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
-
                                 currentTask = current_task()
+                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
 
                                 group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
 
@@ -764,13 +790,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                         delay *= 5
                                     end 
                                     if rerun != :FirstRun
-                                        sleep(0.1) # Hack to get new data
+                                        # This is so any updates to the market are applied before we optimise, realistically this only matters when we need to rerun.
+                                        # We need to fetch any change due to this bot betting
+                                        sleep(0.5) # Hack to get new data
                                         # maybe yield() works
                                     end
 
-                                    # This is so any updates to the market are applied before we optimise, realistically this only matters is we need to rerun and so while we wait for POST of bets we can fetch any changes.
-                                    # not necessary because of hack
-                                    yield()
             
                                     @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
                                     @debug "current prob $(marketDataBySlug[slug].probability)"
@@ -904,7 +929,7 @@ end
 # Need to run manually
 # using Logging, LoggingExtras, Dates
 # timestamp_logger(logger) = TransformerLogger(logger) do log
-#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS:sss")) $(log.message)"))
+#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
 # end
 # const DIR = "H:\\Code\\ManifoldMarkets.jl\\Bots\\src\\logs"
 # global_logger(TeeLogger(
