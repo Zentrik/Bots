@@ -3,16 +3,17 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-macro async_showerr(ex)
+macro spawn_showerr(ex)
     esc(quote
-        @async try
+        Threads.@spawn try
             eval($ex)
         catch err
-            bt = catch_backtrace()
-            # println()
-            # showerror(stderr, err, bt)
-            @error "Something went wrong" exception = (err, bt)
-            rethrow()
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
+            rethrow(err)
         end
     end)
 end
@@ -59,7 +60,7 @@ function execute!(botData, bet)
         rethrow(err)
     end
 
-    if abs(response.shares - bet.shares) / bet.shares < 0.05
+    if response.shares / bet.shares < 0.1 && response.probAfter > 0.02
         @error bet.id # hyperlink
         @error response
         @error response.fills
@@ -162,11 +163,11 @@ function production(; live=true, confirmBets=false)
             send(socket, pushJSON)
             @info "Sent Intialisation"
     
-            @sync try
+            @sync begin
                 #Reading messages
                 # should switch to @spawn
-                @async_showerr for msg in socket
-                    @async_showerr begin 
+                @spawn_showerr for msg in socket
+                    @spawn_showerr begin 
                         msgJSON = JSON3.read(msg)
                         if !(:payload in keys(msgJSON) && :data in keys(msgJSON.payload))
                             @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
@@ -184,6 +185,17 @@ function production(; live=true, confirmBets=false)
                             @debug "Bet was challenge"
                             return nothing
                         end
+
+                        if bet.isAnte
+                            @debug "Bet is ante"
+                            return
+                        end
+
+                        # # On creation of dpm-2 market the subsidy is placed as a bet, https://manifold.markets/JuJumper/who-will-be-the-next-patriarch-of-m
+                        # if bet.probBefore == 0 && bet.probAfter == 1
+                        #     @debug "Is this a dpm-2 market $(bet.probBefore), $(bet.probAfter)"
+                        #     return
+                        # end
 
                         if bet.outcome ∉ ("YES", "NO")
                             @debug "Not a binary market"
@@ -216,18 +228,7 @@ function production(; live=true, confirmBets=false)
                             return
                         end
 
-                        if bet.isAnte
-                            @debug "Bet is ante"
-                            return
-                        end
-
-                        # On creation of dpm-2 market the subsidy is placed as a bet, https://manifold.markets/JuJumper/who-will-be-the-next-patriarch-of-m
-                        if bet.probBefore == 0 && bet.probAfter == 1
-                            @debug "Is this a dpm-2 market $(bet.probBefore), $(bet.probAfter)"
-                            return
-                        end
-
-                        if !(bet.probBefore > 0.1 && bet.probAfter < 0.005) || (bet.probBefore < 0.9 && bet.probAfter > 0.995)
+                        if !((bet.probBefore > 0.1 && bet.probAfter < 0.005) || (bet.probBefore < 0.9 && bet.probAfter > 0.995))
                             @debug "Bet Probabilities not in desired range, $(bet.probBefore), $(bet.probAfter)"
                             return
                         end
@@ -242,19 +243,22 @@ function production(; live=true, confirmBets=false)
                             if marketById[marketId].shares[outcome] > 1
                                 @debug "$(marketById[marketId].shares[outcome]) already own shares, $marketId, $(marketById[marketId].shares), $outcome"
                                 return
-                            elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 50
-                                amount = 10.
+                            elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 500
+                                amount = 40.
                             end
                         else
+                            # Could cause race
                             marketById[marketId] = MarketData()
-                            amount = 5.
+                            amount = 20.
                         end
 
                         if bet.userId in dumbUsers
                             amount *= 2
                         end
 
+                        timenow = time_ns()
                         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"], socket_type_tls=OpenSSL.SSLStream)
+                        @info "Getting Market took $((time_ns - timenow)/10^6) ms"
                         responseJSON = JSON3.read(response.body)[1]
 
                         @debug responseJSON
@@ -286,7 +290,7 @@ function production(; live=true, confirmBets=false)
 
                         newProb = poolToProb(market.p, market.pool)
 
-                        if !(market.prob > 0.1 && newProb < 0.005) || (bet.probBefore < 0.9 && newProb > 0.995)
+                        if !((market.prob > 0.1 && newProb < 0.005) || (bet.probBefore < 0.9 && newProb > 0.995))
                             @debug "Market Probabilities not in desired range, $(market.prob), $(newProb), $(market.p), $(market.pool)"
                             return
                         end
@@ -305,6 +309,7 @@ function production(; live=true, confirmBets=false)
                             if ohno 
                                 response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares), socket_type_tls=OpenSSL.SSLStream)
                             else
+                                # Could cause data race
                                 updateShares!(MarketData, response, botData)
                             end
                         end
@@ -314,13 +319,13 @@ function production(; live=true, confirmBets=false)
                 end
     
                 # HeartBeat
-                @async_showerr while !WebSockets.isclosed(socket)
+                @spawn_showerr while !WebSockets.isclosed(socket)
                     send(socket, heartbeatJSON)
                     sleep(30)
                 end
 
                 # Fetch new balance at 8am
-                @async_showerr while !WebSockets.isclosed(socket)
+                @spawn_showerr while !WebSockets.isclosed(socket)
                     printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
@@ -337,11 +342,6 @@ function production(; live=true, confirmBets=false)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
                 end
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-                rethrow(err)
             end
         catch err
             if err isa InterruptException
