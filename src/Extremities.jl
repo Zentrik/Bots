@@ -147,6 +147,9 @@ pushJSON = JSON3.write(
     )
 )
 
+isMarketClosed(market) = market.isResolved || market.closeTime / 1000 < time() # if resolved or closed
+
+
 function production(; live=true, confirmBets=false)
     marketById, botData, arguments, smartUsers, dumbUsers = setup(live, confirmBets)
 
@@ -161,6 +164,7 @@ function production(; live=true, confirmBets=false)
     
             @sync try
                 #Reading messages
+                # should switch to @spawn
                 @async_showerr for msg in socket
                     @async_showerr begin 
                         msgJSON = JSON3.read(msg)
@@ -168,6 +172,8 @@ function production(; live=true, confirmBets=false)
                             @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
                             return nothing
                         end
+
+                        # FILTER out updates, only want inserts
 
                         bet = msgJSON.payload.data.record.data
 
@@ -179,7 +185,18 @@ function production(; live=true, confirmBets=false)
                             return nothing
                         end
 
+                        if bet.outcome ∉ ("YES", "NO")
+                            @debug "Not a binary market"
+                            return nothing
+                        end
+                        
+                        if bet.fills[end].timestamp/1000 < time() - 10
+                            @debug "Bet happened over 10s ago, $(bet.fills[end].timestamp) in unix time"
+                            return nothing
+                        end
+
                         # should account for anti-bot market: bet to 90% then big move. As long as we only bet 10 and don't bet on a market multiple times should be fine
+                        # bet from 1 to 10, then 10 to 1 is an easy way to exploit this bot. rn using market.prob might help as that is some sort of lagged value. Could look at probChanges?
 
                         # if market creator is the bettor/ market new ? how to test this
                         
@@ -193,76 +210,91 @@ function production(; live=true, confirmBets=false)
 
                         # either not a liquid market or small prob change/ what matter is how much an idiot bet not how much the market slipped
                         # odd number to make it harder to work out, could add rand() ppl start working it out
-                        if abs(bet.amount) < 218.1567984
-                            @debug "$(abs(bet.amount)) is too small"
+                        # might need different logic if selling, but given we assuming market prob before is 10-90 probs didn't matter
+                        if abs(bet.shares) < 218.1567984
+                            @debug "$(abs(bet.shares)) is too small"
                             return
                         end
 
-                        if (bet.probBefore > 0.1 && bet.probAfter < 0.005) || (bet.probBefore < 0.9 && bet.probAfter > 0.995)
-                            @debug "market id: $marketId from $(bet.probBefore) to $(bet.probAfter) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                        if !(bet.probBefore > 0.1 && bet.probAfter < 0.005) || (bet.probBefore < 0.9 && bet.probAfter > 0.995)
+                            @debug "Bet Probabilities not in desired range, $(bet.probBefore), $(bet.probAfter)"
+                            return
+                        end
 
-                            sign = bet.probAfter < 0.005 ? 1 : -1
+                        @debug "market id: $marketId from $(bet.probBefore) to $(bet.probAfter) at $(Dates.format(now(), "HH:MM:SS.sss"))"
 
-                            outcome = sign == 1 ? :YES : :NO
+                        sign = bet.probAfter < 0.005 ? 1 : -1
 
-                            if marketId in keys(marketById) 
-                                if marketById[marketId].shares[outcome] > 1
-                                    @debug "$(marketById[marketId].shares[outcome]) already own shares, $marketId, $(marketById[marketId].shares), $outcome"
-                                    return
-                                elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 50
-                                    amount = 10.
-                                end
+                        outcome = sign == 1 ? :YES : :NO
+
+                        if marketId in keys(marketById) 
+                            if marketById[marketId].shares[outcome] > 1
+                                @debug "$(marketById[marketId].shares[outcome]) already own shares, $marketId, $(marketById[marketId].shares), $outcome"
+                                return
+                            elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 50
+                                amount = 10.
+                            end
+                        else
+                            marketById[marketId] = MarketData()
+                            amount = 5.
+                        end
+
+                        if bet.userId in dumbUsers
+                            amount *= 2
+                        end
+
+                        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
+                        responseJSON = JSON3.read(response.body)[1]
+
+                        @debug responseJSON
+
+                        if responseJSON.data.mechanism != "cpmm-1"
+                            @debug "$(responseJSON.data.mechanism) not cpmm-1"
+                            return
+                        end
+
+                        if responseJSON.creator_id == bet.userId 
+                            @debug "$(bet.userId) is the market creator"
+                            return
+                        end
+
+                        if responseJSON.data.closeTime - time() * 1000 < 60*60*1000 + 6.234*60*1000 # closes in an hour
+                            @debug "$marketId closes in $(responseJSON.data.closeTime/1000 - time())s"
+                            return
+                        end
+
+                        if time() * 1000 - responseJSON.data.createdTime < 1.12654*24*60*60*1000# created a day ago
+                            @debug "$marketId created $(time() - responseJSON.data.closeTime/1000)s ago"
+                            return
+                        end
+
+                        if isMarketClosed(responseJSON.data)
+                            @debug "$marketId closed, $(responseJSON.data.isResolved), close time is $(responseJSON.data.closeTime)"
+                            return
+                        end
+
+                        newProb = poolToProb(market.p, market.pool)
+
+                        if !(market.prob > 0.1 && newProb < 0.005) || (bet.probBefore < 0.9 && newProb > 0.995)
+                            @debug "Market Probabilities not in desired range, $(market.prob), $(newProb), $(market.p), $(market.pool)"
+                            return
+                        end
+                        shares = amount / (bet.probAfter + sign * .25)
+                        bet = PlannedBet(amount, shares, outcome, marketId)
+
+                        @info "Making bet on $marketId for $amount buying $outcome at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                        
+                        if arguments.live
+                            response, ohno = execute!(botData, bet)
+                            # handle non cppm-1 markets
+
+                            # sell shares is probability moved too far from extreme
+
+                            # only works for cpmm-1
+                            if ohno 
+                                response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares))
                             else
-                                marketById[marketId] = MarketData()
-                                amount = 5.
-                            end
-
-                            if bet.userId in dumbUsers
-                                amount *= 2
-                            end
-
-                            response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers= ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
-                            responseJSON = JSON3.read(response.body)[1]
-
-                            @debug responseJSON
-
-                            if responseJSON.data.mechanism != "cpmm-1"
-                                @debug "$(responseJSON.data.mechanism) not cpmm-1"
-                                return
-                            end
-
-                            if responseJSON.creator_id == bet.userId 
-                                @debug "$(bet.userId) is the market creator"
-                                return
-                            end
-
-                            if responseJSON.data.closeTime - time() * 1000 < 60*60*1000 + 6.234*60*1000 # closes in an hour
-                                @debug "$marketId closes in $(responseJSON.data.closeTime/1000 - time())s"
-                                return
-                            end
-
-                            if time() * 1000 - responseJSON.data.createdTime < 1.12654*24*60*60*1000# created a day ago
-                                @debug "$marketId created $(time() - responseJSON.data.closeTime/1000)s ago"
-                                return
-                            end
-
-                            shares = amount / (bet.probAfter + sign * .25)
-                            bet = PlannedBet(amount, shares, outcome, marketId)
-
-                            @info "Making bet on $marketId for $amount buying $outcome at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                            
-                            if arguments.live
-                                response, ohno = execute!(botData, bet)
-                                # handle non cppm-1 markets
-
-                                # sell shares is probability moved too far from extreme
-
-                                # only works for cpmm-1
-                                if ohno 
-                                    response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares))
-                                else
-                                    updateShares!(MarketData, response, botData)
-                                end
+                                updateShares!(MarketData, response, botData)
                             end
                         end
 
