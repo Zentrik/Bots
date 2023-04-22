@@ -23,8 +23,8 @@ Base.exit_on_sigint(false)
 struct Group
     name::String
     slugs::Vector{String}
-    y_matrix::BitMatrix
-    n_matrix::BitMatrix
+    y_matrix::Matrix{Float32}
+    n_matrix::Matrix{Float32}
     noMarkets::Int64
 
     function Group(name, GroupDict)
@@ -344,6 +344,19 @@ isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < tim
 function arbitrageGroup(group, BotData, MarketData, Arguments)
     rerun = :Success
 
+    for slug in group.slugs
+        try 
+            @smart_assert MarketData[slug].probability ≈ poolToProb(MarketData[slug].p, MarketData[slug].pool) "$slug, $(MarketData[slug])"
+        catch err
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
+            rethrow(err)
+        end
+    end
+
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
     allMarketsClosing = true
     for slug in group.slugs
@@ -368,7 +381,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
 
     betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
-    
+
     oldProb = [MarketData[slug].probability for slug in group.slugs]
     oldNoShares = [MarketData[slug].Shares[:NO] for slug in group.slugs]
     oldYesShares = [MarketData[slug].Shares[:YES] for slug in group.slugs]
@@ -647,8 +660,11 @@ end
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
 
+    # Should do this when first connected to websocket so we get updated probabilities
     if !skip
         for group in groupData.groups
+            @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+
             rerun = :FirstRun
             runs = 0
             
@@ -675,6 +691,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
     
             @sync try
                 #Reading messages
+                # should switch to @spawn :interactive
                 @async_showerr for msg in socket
                     @async_showerr begin 
                         msgJSON = JSON3.read(msg)
@@ -738,6 +755,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     end
 
                                     # This is so any updates to the market are applied before we optimise, realistically this only matters is we need to rerun and so while we wait for POST of bets we can fetch any changes.
+                                    # not necessary because of hack
                                     yield()
             
                                     @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
