@@ -734,10 +734,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                                 if !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
                                     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                    
                                     sleep(0.1) # Hack to get new data
                                 end
 
+                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
                                 group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
 
                                 delay = 60
