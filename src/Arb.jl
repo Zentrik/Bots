@@ -218,6 +218,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
     @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=1)
+    yield()
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -241,8 +242,8 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     
 
     if bestSolution == repeat([0.], length(bettableSlugsIndex))
-        yield()
         @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3)
+        yield()
 
         nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
 
@@ -681,6 +682,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
+    currentTask = @async nothing
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
         try
             @info "Opened Socket"
@@ -732,13 +734,24 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
 
-                                if !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                # if !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                #     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                #     sleep(0.1) # Hack to get new data
+                                # elseif !istaskdone(currentTask) # only want to sleep once so just elif
+                                #     wait(currentTask)
+                                #     sleep(0.1) # Hack to get new data
+                                # end
+
+                                if !istaskdone(currentTask) # only want to sleep once so just elif
+                                    wait(currentTask)
                                     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    
                                     sleep(0.1) # Hack to get new data
                                 end
 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+
+                                currentTask = current_task()
+
                                 group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
 
                                 delay = 60
