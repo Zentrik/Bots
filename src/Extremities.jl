@@ -155,6 +155,7 @@ function production(; live=true, confirmBets=false)
             @info "Opened Socket"
             @debug socket
 
+            # We could fetch contracts instead which saves us making a HTTP request but we really want the bettors id
             send(socket, pushJSON)
             @info "Sent Intialisation"
     
@@ -225,8 +226,8 @@ function production(; live=true, confirmBets=false)
 
                             @debug responseJSON
 
-                            if responseJSON.data.mechanism == "cpmm-1"
-                                @debug "$marketId not cpmm-1"
+                            if responseJSON.data.mechanism != "cpmm-1"
+                                @debug "$(responseJSON.data.mechanism) not cpmm-1"
                                 return
                             end
 
