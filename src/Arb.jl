@@ -1,11 +1,7 @@
-module ArbBot
-
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Parameters
 using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
-
-not_ArbBot_message_filter(log) = log._module === ArbBot || log._module === Main
 
 macro async_showerr(ex)
     esc(quote
@@ -15,7 +11,7 @@ macro async_showerr(ex)
             bt = catch_backtrace()
             # println()
             # showerror(stderr, err, bt)
-            @error "Something went wrong" exception = (e, bt)
+            @error "Something went wrong" exception = (err, bt)
             rethrow()
         end
     end)
@@ -98,7 +94,11 @@ function execute(bet, currentProb, APIKEY)
     try 
         @smart_assert bet.outcome == response.outcome
     catch err
-        @error "Something went wrong" exception = (e, catch_backtrace())
+        @error "Something went wrong" err
+        # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+        for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+            @error line
+        end
         rethrow(err)
     end
 
@@ -112,7 +112,11 @@ function execute(bet, currentProb, APIKEY)
         try 
             @smart_assert !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
         catch err
-            @error "Something went wrong" exception = (e, catch_backtrace())
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
             rethrow(err)
         end
     end
@@ -295,7 +299,11 @@ function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri
             try 
                 @smart_assert !isnothing(MarketData[slug].id)
             catch err
-                @error "Something went wrong" exception = (e, catch_backtrace())
+                @error "Something went wrong" err
+                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                    @error line
+                end
                 rethrow(err)
             end
         end
@@ -306,7 +314,11 @@ function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri
         try 
             @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
         catch err
-            @error "Something went wrong" exception = (e, catch_backtrace())
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
             rethrow(err)
         end
 
@@ -407,7 +419,11 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             try 
                 @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].sortedLimitProbs[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
             catch err
-                @error "Something went wrong" exception = (e, catch_backtrace())
+                @error "Something went wrong" err
+                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                    @error line
+                end
                 rethrow(err)
             end
             
@@ -539,7 +555,11 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         try 
             @smart_assert length(MarketDataBySlug) < 1000
         catch err
-            @error "Something went wrong" exception = (e, catch_backtrace())
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
             rethrow(err)
         end
         # will fail if we have more than 1000
@@ -671,7 +691,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             try 
                                 @smart_assert market.mechanism == "cpmm-1"
                             catch err
-                                @error "Something went wrong" exception = (e, catch_backtrace())
+                                @error "Something went wrong" err
+                                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+                                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                                    @error line
+                                end
                                 rethrow(err)
                             end
 
@@ -691,8 +715,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
 
-                                wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                if !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                    sleep(0.1) # Hack to get new data
+                                end
 
                                 group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
 
@@ -833,22 +860,25 @@ function testLogging()
     try 
         @smart_assert 1 != 1
     catch err
-        @error "Something went wrong" exception = (err, catch_backtrace())
+        @error "Something went wrong" err
+        # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+        for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+            @error line
+        end
         # rethrow(err)
     end
 end
 
-# Need to run manually?
-using Logging, LoggingExtras, Dates
-timestamp_logger(logger) = TransformerLogger(logger) do log
-    merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS")) $(log.message)"))
-end
-const DIR = "H:\\Code\\ManifoldMarkets.jl\\ArbBot\\src\\logs"
-global_logger(TeeLogger(
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
-    EarlyFilteredLogger(ArbBot.not_ArbBot_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
-    timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
-))
-ArbBot.testLogging()
-end
+# Need to run manually
+# using Logging, LoggingExtras, Dates
+# timestamp_logger(logger) = TransformerLogger(logger) do log
+#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS:sss")) $(log.message)"))
+# end
+# const DIR = "H:\\Code\\ManifoldMarkets.jl\\Bots\\src\\logs"
+# global_logger(TeeLogger(
+#     EarlyFilteredLogger(Bots.not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
+#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
+#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
+#     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
+# ))
+# ArbBot.testLogging()
