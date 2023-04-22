@@ -216,6 +216,17 @@ function production(; live=true, confirmBets=false)
                             return
                         end
 
+                        if bet.isAnte
+                            @debug "Bet is ante"
+                            return
+                        end
+
+                        # On creation of dpm-2 market the subsidy is placed as a bet, https://manifold.markets/JuJumper/who-will-be-the-next-patriarch-of-m
+                        if bet.probBefore == 0 && bet.probAfter == 1
+                            @debug "Is this a dpm-2 market $(bet.probBefore), $(bet.probAfter)"
+                            return
+                        end
+
                         if !(bet.probBefore > 0.1 && bet.probAfter < 0.005) || (bet.probBefore < 0.9 && bet.probAfter > 0.995)
                             @debug "Bet Probabilities not in desired range, $(bet.probBefore), $(bet.probAfter)"
                             return
@@ -243,7 +254,7 @@ function production(; live=true, confirmBets=false)
                             amount *= 2
                         end
 
-                        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
+                        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"], socket_type_tls=OpenSSL.SSLStream)
                         responseJSON = JSON3.read(response.body)[1]
 
                         @debug responseJSON
@@ -264,7 +275,7 @@ function production(; live=true, confirmBets=false)
                         end
 
                         if time() * 1000 - responseJSON.data.createdTime < 1.12654*24*60*60*1000# created a day ago
-                            @debug "$marketId created $(time() - responseJSON.data.closeTime/1000)s ago"
+                            @debug "$marketId created $(time() - responseJSON.data.createdTime/1000)s ago"
                             return
                         end
 
@@ -292,7 +303,7 @@ function production(; live=true, confirmBets=false)
 
                             # only works for cpmm-1
                             if ohno 
-                                response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares))
+                                response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares), socket_type_tls=OpenSSL.SSLStream)
                             else
                                 updateShares!(MarketData, response, botData)
                             end
@@ -402,7 +413,7 @@ end
 # using Logging, LoggingExtras, Dates
 
 # timestamp_logger(logger) = TransformerLogger(logger) do log
-#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS")) $(log.message)"))
+#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
 # end
 # const DIR = "H:\\Code\\ManifoldMarkets.jl\\Bots\\src\\logs-Extremities"
 # global_logger(TeeLogger(
