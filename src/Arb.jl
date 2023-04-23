@@ -218,8 +218,12 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
+    @debug "Running adaptive for $(group.name)"
     @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=3)
+
+    @debug "Yielding after adaptive, $(group.name)"
     yield()
+    @debug "Done yielding after adaptive, $(group.name)"
 
     bestSolution = repeat([0.], length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, MarketData, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
@@ -243,8 +247,13 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     
 
     if bestSolution == repeat([0.], length(bettableSlugsIndex))
+        @debug "Running resampling for $(group.name)"
+
         @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3)
+        
+        @debug "Yielding after resampling, $(group.name)"
         yield()
+        @debug "Done yielding after resampling, $(group.name)"
 
         nonZeroIndices = findall(!iszero, sol2.u::Vector{Float64})
 
@@ -354,6 +363,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     maxBetAmount = BotData.balance / (2 + 1.5*group.noMarkets)
     # redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
     # maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
+    # Remove hack for now as it seems to prevent optmiser betting as much as it can which prevents reruns
 
     betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
@@ -362,10 +372,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     oldYesShares = [MarketData[slug].Shares[:YES] for slug in group.slugs]
 
     newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
-
-    for (i, slug) in enuumerate(group.slugs)
-        MarketData[slug].lastOptimisedProb = newProb[i]
-    end
 
     oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
 
@@ -454,7 +460,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100
         @error "Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
-        rerun = :Success
+        rerun = :InsufficientBalance
         return rerun
     end
 
@@ -528,6 +534,11 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
             fetchMyShares!(marketDataBySlug, BotData.USERID)
 
             rerun = :PostFailure
+        end
+
+        
+        for (i, slug) in enumerate(group.slugs)
+            MarketData[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
         end
 
         return rerun
@@ -672,8 +683,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         end
 
                         market = msgJSON.payload.data.record.data
-
-                        
                         marketId = market.id
                         # @debug market.slug
                     
@@ -692,22 +701,42 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             # @warn "from prob $(market.prob)"
                             end
 
+                            # Should probably only do this if market data actually changed
                             @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability)"
                             notify(marketDataBySlug[slug].hasUpdated)
 
+                            # oldProb is to check if market moved?
+                            # lastOptimisedProb is to prevent rerunning on already optimised market, accounts for getting new market data due to our own bet
                             if marketDataBySlug[slug].probability ≉ oldProb && marketDataBySlug[slug].probability ≉ marketDataBySlug[slug].lastOptimisedProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
                                 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
 
-                                if !istaskdone(currentTask) # only want to sleep once so just elif
+                                while !istaskdone(currentTask) # say we have 3 tasks A, B, C. A is running when B, C come in so both wait for A to finish. The B runs sets currentTask to itself but C is onlt waiting for A not the new currentTask B so need a while loop.
                                     wait(currentTask)
-                                    wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    @debug "Finished waiting for current task, $currentTask, $slug, $(marketDataBySlug[slug].probability)"
                                 end
 
+                                while !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                    @debug "Finished waiting for previous run of market, $(TaskDict[groupData.contractIdToGroupIndex[marketId]].task), $slug, $(marketDataBySlug[slug].probability)"
+                                end
+
+                                # if we've already optimised on this market data
+                                if !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                                    @debug "No need to rerun $slug"
+                                    return nothing
+                                end
+                                
                                 currentTask = current_task()
+                                @debug "current task set to $currentTask, $slug"
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
 
                                 group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
+
+                                if marketDataBySlug[slug].probability ≈ marketDataBySlug[slug].lastOptimisedProb
+                                    @debug "market already optimised $slug"
+                                    return nothing
+                                end
 
                                 delay = 60
                                 runs = 0
@@ -846,15 +875,15 @@ function testLogging()
 end
 
 # Need to run manually
-# using Logging, LoggingExtras, Dates
-# timestamp_logger(logger) = TransformerLogger(logger) do log
-#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
-# end
-# const DIR = "H:\\Code\\ManifoldMarkets.jl\\Bots\\src\\logs"
-# global_logger(TeeLogger(
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
-#     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
-# ))
+using Logging, LoggingExtras, Dates
+timestamp_logger(logger) = TransformerLogger(logger) do log
+    merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
+end
+const DIR = "Bots\\src\\logs"
+global_logger(TeeLogger(
+    EarlyFilteredLogger(Bots.not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
+    EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd HH-MM")).log"), Logging.Info)),
+    EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd HH-MM")).log"), Logging.Debug)),
+    timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd HH-mm")).log"), Logging.Debug))
+))
 # ArbBot.testLogging()
