@@ -258,7 +258,7 @@ function production(; live=true, confirmBets=false)
 
                         timenow = time_ns()
                         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"], socket_type_tls=OpenSSL.SSLStream)
-                        @info "Getting Market took $((time_ns - timenow)/10^6) ms"
+                    @info "Getting Market took $((time_ns() - timenow)/10^6) ms"
                         responseJSON = JSON3.read(response.body)[1]
 
                         @debug responseJSON
@@ -326,21 +326,23 @@ function production(; live=true, confirmBets=false)
 
                 # Fetch new balance at 8am
                 @spawn_showerr while !WebSockets.isclosed(socket)
-                    printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
+
                     timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
                     printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
+
                     timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
+                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    botData.balance = getUserByUsername(botData.USERNAME).balance
                 end
             end
         catch err
