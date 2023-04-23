@@ -8,11 +8,27 @@ macro async_showerr(ex)
         @async try
             eval($ex)
         catch err
-            bt = catch_backtrace()
-            # println()
-            # showerror(stderr, err, bt)
-            @error "Something went wrong" exception = (err, bt)
-            rethrow()
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
+            rethrow(err)
+        end
+    end)
+end
+
+macro smart_assert_showerr(ex, msg=nothing)
+    esc(quote
+        try
+            @smart_assert eval($ex) eval($msg)
+        catch err
+            @error "Something went wrong" err
+            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
+            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
+                @error line
+            end
+            rethrow(err)
         end
     end)
 end
@@ -91,16 +107,7 @@ function execute(bet, currentProb, APIKEY)
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
 
-    try 
-        @smart_assert bet.outcome == response.outcome
-    catch err
-        @error "Something went wrong" err
-        # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-        for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-            @error line
-        end
-        rethrow(err)
-    end
+    @smart_assert_showerr bet.outcome == response.outcome
 
     if response.shares ≉ bet.shares
         @error "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n" # hyperlink
@@ -109,16 +116,7 @@ function execute(bet, currentProb, APIKEY)
 
         ohno = true
 
-        try 
-            @smart_assert !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow(err)
-        end
+        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
     end
 
     return response, ohno
@@ -297,31 +295,13 @@ end
 function getMarketsUsingId!(MarketData, slugs) # If we use slugs the request uri is too long
     try
         for slug in slugs
-            try 
-                @smart_assert !isnothing(MarketData[slug].id)
-            catch err
-                @error "Something went wrong" err
-                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                    @error line
-                end
-                rethrow(err)
-            end
+            @smart_assert_showerr !isnothing(MarketData[slug].id)
         end
         
         contracts_ids = join(map(slug -> MarketData[slug].id, slugs), ",") # might be faster to index by id
         # contracts_slugs = join(slugs, ",")
 
-        try 
-            @smart_assert length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow(err)
-        end
+        @smart_assert_showerr length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
 
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
@@ -346,16 +326,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     rerun = :Success
 
     for slug in group.slugs
-        try 
-            @smart_assert MarketData[slug].probability ≈ poolToProb(MarketData[slug].p, MarketData[slug].pool) "$slug, $(MarketData[slug])"
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow(err)
-        end
+        @smart_assert_showerr MarketData[slug].probability ≈ poolToProb(MarketData[slug].p, MarketData[slug].pool) "$slug, $(MarketData[slug]), $(MarketData[slug].pool), $(poolToProb(MarketData[slug].p, MarketData[slug].pool))"
     end
 
     # Actually could close in the delay between running and here, or due to reruns. But we don't need to pop the group from groups
@@ -430,16 +401,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
-            try 
-                @smart_assert (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].sortedLimitProbs[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
-            catch err
-                @error "Something went wrong" err
-                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                    @error line
-                end
-                rethrow(err)
-            end
+            @smart_assert_showerr (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].sortedLimitProbs[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
             
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
@@ -519,26 +481,28 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
                     updateShares!(MarketData[slug], executedBet, BotData)
 
-                    MarketData[slug].probability = executedBet.probAfter # update otherwise we might arb again if bets are duplicated.
+                    # We might update after already receiving upto data market data
+                    # MarketData[slug].probability = executedBet.probAfter # update otherwise we might arb again if bets are duplicated.
 
-                    # If we don't fetch new message by the time we run again, at least we have a more accurate pool
-                    if !isnothing(executedBet.fills)
-                        shares = 0.
-                        amount = 0.
+                    # this might just be wrong
+                    # # If we don't fetch new message by the time we run again, at least we have a more accurate pool
+                    # if !isnothing(executedBet.fills)
+                    #     shares = 0.
+                    #     amount = 0.
 
-                        for fill in executedBet.fills
-                            if isnothing(fill.matchedBetId)
-                                shares += fill.shares
-                                amount += fill.amount
-                            end
-                        end
+                    #     for fill in executedBet.fills
+                    #         if isnothing(fill.matchedBetId)
+                    #             shares += fill.shares
+                    #             amount += fill.amount
+                    #         end
+                    #     end
 
-                        for outcome in (:NO, :YES)
-                            MarketData[slug].pool[outcome] += amount
-                        end
+                    #     for outcome in (:NO, :YES)
+                    #         MarketData[slug].pool[outcome] += amount
+                    #     end
 
-                        MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
-                    end
+                    #     MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
+                    # end
 
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
@@ -587,16 +551,8 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         # https://discourse.julialang.org/t/broadcast-object-property/47104/6
         contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
 
-        try 
-            @smart_assert length(MarketDataBySlug) < 1000
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow(err)
-        end
+        @smart_assert_showerr length(MarketDataBySlug) < 1000
+
         # will fail if we have more than 1000
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
@@ -707,7 +663,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
                             if rerun != :FirstRun
                                 # @time "Get All Markets" getMarketsUsingId!(marketDataBySlug, group.slugs)
-                                sleep(0.5) # Hack
+                                sleep(5) # Hack
                             end
                             rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
             
@@ -716,7 +672,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     end
 
                     @warn "All: Done all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                    skip = true #hack to prevent rerun, pretty sure unnecessary
                 end
                 #Reading messages
                 # should switch to @spawn :interactive
@@ -729,20 +684,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         end
 
                         market = msgJSON.payload.data.record.data
+
+                        
                         marketId = market.id
                         # @debug market.slug
                     
                         if marketId in groupData.contractIdSet 
-                            try 
-                                @smart_assert market.mechanism == "cpmm-1"
-                            catch err
-                                @error "Something went wrong" err
-                                # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-                                for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                                    @error line
-                                end
-                                rethrow(err)
-                            end
+                            @smart_assert_showerr market.mechanism == "cpmm-1"
 
                             slug = groupData.contractIdToSlug[marketId] #market.slug also works
                             oldProb = marketDataBySlug[slug].probability
@@ -772,7 +720,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     wait(currentTask)
                                     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
                                     # each bet takes about .3s from when we have got POST response to get a message from websocket
-                                    sleep(0.5) # Hack to get new data
+                                    @debug "Sleeping after waiting for task to finish"
+                                    sleep(5) # Hack to get new data
                                 end
 
                                 currentTask = current_task()
@@ -792,10 +741,15 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     if rerun != :FirstRun
                                         # This is so any updates to the market are applied before we optimise, realistically this only matters when we need to rerun.
                                         # We need to fetch any change due to this bot betting
-                                        sleep(0.5) # Hack to get new data
+                                        @debug "Sleeping on rerun"
+                                        sleep(5) # Hack to get new data
                                         # maybe yield() works
                                     end
 
+                                    # no need to run any previously queued requests.
+                                    if TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                                        TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                    end
             
                                     @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
                                     @debug "current prob $(marketDataBySlug[slug].probability)"
@@ -914,16 +868,7 @@ function testLogging()
     @warn("won't see this either")
     @error("You will only see this")
     @debug "test"
-    try 
-        @smart_assert 1 != 1
-    catch err
-        @error "Something went wrong" err
-        # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-        for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-            @error line
-        end
-        # rethrow(err)
-    end
+    @smart_assert_showerr 1 != 1
 end
 
 # Need to run manually
