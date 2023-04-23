@@ -69,6 +69,9 @@ end
 
     isResolved::Bool = false
     closeTime::Int = -1
+
+    hasUpdated::typeof(Condition()) = Condition()
+    lastOptimisedProb::Float64 = -1
 end
 
 @with_kw mutable struct BotData @deftype String
@@ -349,8 +352,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     plannedBets = PlannedBet[]
 
     maxBetAmount = BotData.balance / (2 + 1.5*group.noMarkets)
-    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
-    maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
+    # redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
+    # maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
 
     betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
 
@@ -359,6 +362,10 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     oldYesShares = [MarketData[slug].Shares[:YES] for slug in group.slugs]
 
     newProfitsByEvent, noShares, yesShares, newProb = f(betAmounts, group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
+
+    for (i, slug) in enuumerate(group.slugs)
+        MarketData[slug].lastOptimisedProb = newProb[i]
+    end
 
     oldProfitsByEvent, _, _, _ = f(repeat([0.], length(bettableSlugsIndex)), group, MarketData, oldNoShares, oldYesShares, bettableSlugsIndex)
 
@@ -467,9 +474,9 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         # I think we are able to fetch messages while we're making bets
         @sync try 
             for bet in plannedBets 
-                @async_showerr begin
-                    slug = urlToSlug(bet.url)
+                slug = urlToSlug(bet.url)
 
+                @async_showerr begin
                     # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
                     executedBet, ohno = execute(bet, oldProbBySlug[slug], BotData.APIKEY)
 
@@ -480,30 +487,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                     end
 
                     updateShares!(MarketData[slug], executedBet, BotData)
-
-                    # We might update after already receiving upto data market data
-                    # MarketData[slug].probability = executedBet.probAfter # update otherwise we might arb again if bets are duplicated.
-
-                    # this might just be wrong
-                    # # If we don't fetch new message by the time we run again, at least we have a more accurate pool
-                    # if !isnothing(executedBet.fills)
-                    #     shares = 0.
-                    #     amount = 0.
-
-                    #     for fill in executedBet.fills
-                    #         if isnothing(fill.matchedBetId)
-                    #             shares += fill.shares
-                    #             amount += fill.amount
-                    #         end
-                    #     end
-
-                    #     for outcome in (:NO, :YES)
-                    #         MarketData[slug].pool[outcome] += amount
-                    #     end
-
-                    #     MarketData[slug].pool[Symbol(executedBet.outcome)] -= shares
-                    # end
-
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
 
@@ -527,6 +510,13 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                             MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
                         end
                     end
+                end
+
+                # If data comes in before POST response occurs we don't want to be stuck waiting
+                @async_showerr begin
+                    @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
+                    @debug wait(MarketData[slug].hasUpdated)
+                    @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
             end
         catch err
@@ -654,17 +644,15 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                    for group in groupData.groups
-                        @warn "All: Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-            
+                    for group in groupData.groups            
                         rerun = :FirstRun
                         runs = 0
                         
-                        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure 
-                            if rerun != :FirstRun
-                                # @time "Get All Markets" getMarketsUsingId!(marketDataBySlug, group.slugs)
-                                sleep(5) # Hack
-                            end
+                        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
+                            @warn "All: Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+
+                            # Need to wait for current bet to finish before rerunning
+                            # this isn't async so surely not a problem
                             rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
             
                             runs += 1
@@ -699,29 +687,21 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                             # println("Received message: $(market.lastBetTime)")
                             # @warn slug
-                            if marketDataBySlug[slug].probability ≉ oldProb 
+                            if marketDataBySlug[slug].probability ≉ oldProb
                                 @debug "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
                             # @warn "from prob $(market.prob)"
                             end
 
-                            if marketDataBySlug[slug].probability ≉ oldProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability)"
+                            notify(marketDataBySlug[slug].hasUpdated)
+
+                            if marketDataBySlug[slug].probability ≉ oldProb && marketDataBySlug[slug].probability ≉ marketDataBySlug[slug].lastOptimisedProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
                                 
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-
-                                # if !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                #     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                #     sleep(0.1) # Hack to get new data
-                                # elseif !istaskdone(currentTask) # only want to sleep once so just elif
-                                #     wait(currentTask)
-                                #     sleep(0.1) # Hack to get new data
-                                # end
 
                                 if !istaskdone(currentTask) # only want to sleep once so just elif
                                     wait(currentTask)
                                     wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    # each bet takes about .3s from when we have got POST response to get a message from websocket
-                                    @debug "Sleeping after waiting for task to finish"
-                                    sleep(5) # Hack to get new data
                                 end
 
                                 currentTask = current_task()
@@ -738,13 +718,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                         sleep(delay)
                                         delay *= 5
                                     end 
-                                    if rerun != :FirstRun
-                                        # This is so any updates to the market are applied before we optimise, realistically this only matters when we need to rerun.
-                                        # We need to fetch any change due to this bot betting
-                                        @debug "Sleeping on rerun"
-                                        sleep(5) # Hack to get new data
-                                        # maybe yield() works
-                                    end
 
                                     # no need to run any previously queued requests.
                                     if TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
@@ -781,24 +754,25 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                 # Fetch new balance at 8am
                 @async_showerr while !WebSockets.isclosed(socket)
-                    printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+
+                    printstyled("1: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     botData.balance = getUserByUsername(botData.USERNAME).balance
+
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
-                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
-                    timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
-                    sleep(timeTo8)
+
+                    if !WebSockets.isclosed(socket)
+                        printstyled("2: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
                 end
             catch err
                 bt = catch_backtrace()
