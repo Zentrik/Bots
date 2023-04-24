@@ -13,15 +13,38 @@ macro async_showerr(ex)
     end)
 end
 
-@sync try
-    try 
-        @async throw(ArgumentError)
-    catch
-        rethrow()
+try
+    @sync begin
+        @async while true
+            sleep(5)
+            println("going")
+            throw(MethodError)
+        end
+        throw(ArgumentError)
     end
-    @async while true
-        sleep(5)
-        # println("oops")
+catch
+    println("Caught 1")
+end
+
+try
+    @sync begin
+        @async throw(ArgumentError)
+    end
+catch
+    println("Caught 1")
+end
+
+try
+    @sync begin
+        try 
+            @async throw(ArgumentError)
+        catch
+            rethrow()
+        end
+        @async while true
+            sleep(5)
+            # println("oops")
+        end
     end
 catch
     println("Caught 1")
@@ -44,10 +67,10 @@ try
     try
         @sync begin
             @async throw(ArgumentError)
-            # @async while true
-            #     sleep(5)
-            #     # println("oops")
-            # end
+            @async for i in 1:2
+                sleep(5)
+                println("oops")
+            end
         end
     catch
         println("Caught 1")
@@ -60,6 +83,19 @@ finally
     println("done")
 end
 
+try 
+    @sync begin
+        @async for i in 1:2
+            sleep(2)
+            println("oops")
+        end
+        throw(ArgumentError)
+    end
+catch err
+    println("Caught")
+finally
+    println("done")
+end
 
 
 @sync begin 

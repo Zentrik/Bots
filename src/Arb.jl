@@ -13,7 +13,7 @@ macro async_showerr(ex)
             for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
                 @error line
             end
-            rethrow(err)
+            rethrow()
         end
     end)
 end
@@ -28,7 +28,7 @@ macro smart_assert_showerr(ex, msg=nothing)
             for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
                 @error line
             end
-            rethrow(err)
+            rethrow()
         end
     end)
 end
@@ -217,8 +217,8 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     # ub = repeat([maxBetAmount], length(bettableSlugsIndex))
     # lb = -ub
 
-    ub = [MarketData[slug].probability > .99 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
-    lb = [MarketData[slug].probability < .01 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    ub = [MarketData[slug].probability > .98 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = [MarketData[slug].probability < .02 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
@@ -433,6 +433,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
 
     sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
 
+    # we never return a profit less than 0 so we're not going to redeem bets that have profit less than 0.
     if (profit ≤ 0) && !(profit + FEE * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.)
         rerun = :Success
         return rerun
@@ -442,7 +443,6 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     for (i, bet) in enumerate(plannedBets)
         amount = betAmounts[i]
         slug = urlToSlug(bet.url)
-        bet = plannedBets[i]
 
         if abs(amount) >= .98 * maxBetAmount
             @warn "Bet size is $(100 * abs(amount)/maxBetAmount)% of maxBetAmount"
@@ -519,7 +519,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                         elseif executedBet.outcome == "NO"
                             MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
                         end
-                    else
+                    else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
                         MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
                         MarketData[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
                     end
@@ -658,7 +658,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             # send(socket, pushJSON("contract_bets"))
             @info "Sent Intialisation"
     
-            @sync try
+            @sync begin
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
@@ -705,8 +705,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             # @warn slug
                             if marketDataBySlug[slug].probability ≉ oldProb
                                 @debug "$slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                            # @warn "from prob $(market.prob)"
                             end
+                            # @warn "from prob $(market.prob)"
 
                             # Should probably only do this if market data actually changed
                             # probability won't change if we are hitting a limit order
@@ -738,7 +738,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     @debug "No need to rerun $slug"
                                     return nothing
                                 end
-                                
+
                                 currentTask = current_task()
                                 @debug "current task set to $currentTask, $slug"
                                 TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
@@ -815,11 +815,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         break
                     end
                 end
-            catch err
-                bt = catch_backtrace()
-                println()
-                showerror(stderr, err, bt)
-                rethrow(err)
             end
         catch err
             if err isa InterruptException
