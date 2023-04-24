@@ -72,6 +72,7 @@ end
 
     hasUpdated::typeof(Condition()) = Condition()
     lastOptimisedProb::Float64 = -1
+    lastBetTime::Int = 0
 end
 
 @with_kw mutable struct BotData @deftype String
@@ -705,8 +706,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             end
 
                             # Should probably only do this if market data actually changed
-                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability)"
-                            notify(marketDataBySlug[slug].hasUpdated)
+                            # probability won't change if we are hitting a limit order
+                            if marketDataBySlug[slug].lastBetTime < market.lastBetTime
+                                marketDataBySlug[slug].lastBetTime = market.lastBetTime
+
+                                @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability) with $(market.lastBetTime)"
+                                notify(marketDataBySlug[slug].hasUpdated)
+                            end
 
                             # oldProb is to check if market moved?
                             # lastOptimisedProb is to prevent rerunning on already optimised market, accounts for getting new market data due to our own bet
