@@ -217,8 +217,8 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     # ub = repeat([maxBetAmount], length(bettableSlugsIndex))
     # lb = -ub
 
-    ub = [MarketData[slug].probability > .99 ? 0. : maxBetAmount for slug in group.slugs]
-    lb = [MarketData[slug].probability < .01 ? 0. : -maxBetAmount for slug in group.slugs]
+    ub = [MarketData[slug].probability > .99 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = [MarketData[slug].probability < .01 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
@@ -418,7 +418,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                 redeemedMana = min(MarketData[slug].Shares[:YES], shares)
             end
 
-            @smart_assert_showerr (sign(amount) == sign(newProb[j] - oldProb[j]) || !isempty(MarketData[slug].sortedLimitProbs[Symbol(outcome)])) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
+            @smart_assert_showerr (sign(amount) == sign(newProb[j] - oldProb[j]) || newProb[j] ≈ MarketData[slug].sortedLimitProbs[Symbol(outcome)][1]) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
             
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, MarketData[slug].id, MarketData[slug].url, MarketData[slug].question)
             push!(plannedBets, bet)
@@ -499,7 +499,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                     updateShares!(MarketData[slug], executedBet, BotData)
 
                     if !isnothing(executedBet.fills[end].matchedBetId)
-
+                        # Limit order might not update in time?
                         limitOrder = getBet(executedBet.fills[end].matchedBetId, BotData.Supabase_APIKEY)
 
                         amountLeft = 0.
@@ -519,6 +519,9 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                         elseif executedBet.outcome == "NO"
                             MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
                         end
+                    else
+                        MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
+                        MarketData[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
                     end
                 end
 
