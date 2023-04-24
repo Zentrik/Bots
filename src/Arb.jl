@@ -213,8 +213,11 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     profitF = OptimizationFunction((betAmount, _) -> -minimum( f!(betAmount, group, MarketData, bettableSlugsIndex, sharesByEvent, profitsByEvent) ))
 
     x0 = repeat([0.], length(bettableSlugsIndex))
-    ub = repeat([maxBetAmount], length(bettableSlugsIndex))
-    lb = -ub
+    # ub = repeat([maxBetAmount], length(bettableSlugsIndex))
+    # lb = -ub
+
+    ub = [MarketData[slug].probability > .99 ? 0. : maxBetAmount for slug in group.slugs]
+    lb = [MarketData[slug].probability < .01 ? 0. : -maxBetAmount for slug in group.slugs]
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
