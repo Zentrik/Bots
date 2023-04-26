@@ -3,35 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-macro async_showerr(ex)
-    esc(quote
-        @async try
-            eval($ex)
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow()
-        end
-    end)
-end
-
-macro smart_assert_showerr(ex, msg=nothing)
-    esc(quote
-        try
-            @smart_assert eval($ex) eval($msg)
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow()
-        end
-    end)
-end
+import ..Bots: @async_showerr, @smart_assert_showerr  
 
 const FEE = 0.03
 Base.exit_on_sigint(false)
@@ -41,6 +13,7 @@ struct Group
     slugs::Vector{String}
     y_matrix::Matrix{Float32}
     n_matrix::Matrix{Float32}
+    not_na_matrix::Matrix{Float32}
     noMarkets::Int64
 
     function Group(name, GroupDict)
@@ -49,13 +22,15 @@ struct Group
         actionVectors = reduce(hcat, values(GroupDict))
         y_matrix = actionVectors .== "YES"
         n_matrix = actionVectors .== "NO"
+        not_na_matrix = actionVectors .!= "NA"
         noMarkets = length(slugs)
     
-        return new(name, slugs, y_matrix, n_matrix, noMarkets)
+        return new(name, slugs, y_matrix, n_matrix, not_na_matrix, noMarkets)
     end
 end
 @with_kw mutable struct MarketData 
     Shares::Dict{Symbol, Float64} = Dict{Symbol, Float64}(:NO => 0., :YES => 0.)
+
     limitOrders::Dict{Symbol, Dict{Float64, Vector{Float64}}} = Dict{Symbol, Dict{Float64, Vector{Float64}}}()
     sortedLimitProbs::Dict{Symbol, Vector{Float64}} = Dict{Symbol, Vector{Float64}}(:NO => [], :YES => [])
 
@@ -113,7 +88,7 @@ function execute(bet, currentProb, APIKEY)
 
     @smart_assert_showerr bet.outcome == response.outcome
 
-    if response.shares ≉ bet.shares
+    if !isapprox(response.shares, bet.shares, atol=1e-2)
         @error "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n" # hyperlink
         @error response
         @error response.fills
@@ -172,12 +147,11 @@ function f(betAmount, group, MarketData, currentNoShares, currentYesShares, bett
     return (profitsByEvent=profitsByEvent, noShares=noShares, yesShares=yesShares, newProbability=newProb)
 end
 
-function f!(betAmount, group, MarketData, bettableSlugsIndex, sharesByEvent, profitsByEvent)
-    fees = 0.
-    totalBetAmount = 0.
+@views @fastmath function f!(betAmount, group, MarketData, bettableSlugsIndex, sharesByEvent, profitsByEvent)
+    fees = zero(eltype(profitsByEvent))
     profitsByEvent .= sharesByEvent # we shouldn't count resolved markets.
 
-    @inbounds @fastmath for (i, j) in enumerate(bettableSlugsIndex)
+    @inbounds for (i, j) in enumerate(bettableSlugsIndex)
         slug = group.slugs[j]
         market = MarketData[slug]
 
@@ -187,19 +161,19 @@ function f!(betAmount, group, MarketData, bettableSlugsIndex, sharesByEvent, pro
 
             fees += FEE
 
+            profitsByEvent .-= group.not_na_matrix[:, j] .* abs(betAmount[i]) 
+
             if betAmount[i] >= 1.
-                profitsByEvent .+= @view(group.y_matrix[:, j]) .* shares
+                profitsByEvent .+= group.y_matrix[:, j] .* shares
             elseif betAmount[i] <= -1.
-                profitsByEvent .+= @view(group.n_matrix[:, j]) .* shares
+                profitsByEvent .+= group.n_matrix[:, j] .* shares
             end
         else
             betAmount[i] = 0.
         end
-
-        totalBetAmount += abs(betAmount[i])
     end
 
-    profitsByEvent .-= totalBetAmount + fees
+    profitsByEvent .-= fees
 
     return profitsByEvent
 end
@@ -218,7 +192,7 @@ function optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
     # lb = -ub
 
     ub = [MarketData[slug].probability > .98 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
-    lb = [MarketData[slug].probability < .02 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = [MarketData[slug].probability < .03 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 
@@ -365,8 +339,8 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     plannedBets = PlannedBet[]
 
     maxBetAmount = BotData.balance / (2 + 1.5*group.noMarkets)
-    # redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
-    # maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
+    redeemManaHack = maximum(slug -> max(MarketData[slug].Shares[:YES] / (1 - MarketData[slug].probability), MarketData[slug].Shares[:NO] / MarketData[slug].probability), group.slugs[bettableSlugsIndex])
+    maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
     # Remove hack for now as it seems to prevent optmiser betting as much as it can which prevents reruns
 
     betAmounts = optimise(group, MarketData, maxBetAmount, bettableSlugsIndex)
@@ -392,12 +366,14 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     @debug betAmounts
     @debug group.y_matrix
     @debug group.n_matrix
+    @debug group.not_na_matrix
     @debug map(slug -> MarketData[slug].Shares[:YES], group.slugs)
     @debug map(slug -> MarketData[slug].Shares[:NO], group.slugs)
     @debug yesShares
     @debug noShares
     @debug group.y_matrix * yesShares
     @debug group.n_matrix * noShares
+    @debug group.not_na_matrix[:, bettableSlugsIndex] * betAmounts
     @debug sum(abs.(betAmounts))
     @debug [MarketData[slug].p for slug in group.slugs]
     @debug [MarketData[slug].pool for slug in group.slugs]
@@ -434,7 +410,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
     sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
 
     # we never return a profit less than 0 so we're not going to redeem bets that have profit less than 0.
-    if (profit ≤ 0) && !(profit + FEE * length(plannedBets) ≥ 0 && sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.)
+    if (profit ≤ 0) && !((profit + FEE * length(plannedBets) ≥ 0) && (sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.))
         rerun = :Success
         return rerun
     end
@@ -462,7 +438,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
         @info "Buy $(bet.shares) $(bet.outcome) shares for $(bet.amount), redeeming $(bet.redeemedMana)"
     end
 
-    if sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100
+    if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + BotData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets))
         @error "Insufficient Balance $(BotData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
         rerun = :InsufficientBalance
         return rerun
@@ -520,6 +496,7 @@ function arbitrageGroup(group, BotData, MarketData, Arguments)
                             MarketData[slug].sortedLimitProbs = Dict(:YES=>[], :NO=>[limitOrder.limitProb])
                         end
                     else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
+                        @debug "Removing limit orders on $(executedBet.outcome), $(MarketData[slug].limitOrders), $(MarketData[slug].sortedLimitProbs)"
                         MarketData[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
                         MarketData[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
                     end
@@ -565,7 +542,7 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
         responseJSON = JSON3.read(response.body)
 
-        # what if it returns nothing for some contract? presumably that means we never invested so MarketData shoudl already be correct
+        # what if it returns nothing for some contract? presumably that means we never invested so MarketData should already be correct
 
         for contract_metrics in responseJSON
             slug = groupData.contractIdToSlug[contract_metrics.contract_id]
@@ -828,7 +805,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
         finally
             println("Finally")
             if !WebSockets.isclosed(socket)
-                send(socket, leaveJSON("live-contracts"))
+                send(socket, leaveJSON())
                 println("Left Channel")
     
                 # msg = receive(socket)
@@ -872,25 +849,3 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=fals
         end
     end
 end
-
-function testLogging()
-    @info("You won't see this")
-    @warn("won't see this either")
-    @error("You will only see this")
-    @debug "test"
-    @smart_assert_showerr 1 != 1
-end
-
-# Need to run manually
-# using Logging, LoggingExtras, Dates
-# timestamp_logger(logger) = TransformerLogger(logger) do log
-#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
-# end
-# const DIR = "Bots\\src\\logs"
-# global_logger(TeeLogger(
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd HH-MM")).log"), Logging.Info)),
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd HH-MM")).log"), Logging.Debug)),
-#     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd HH-mm")).log"), Logging.Debug))
-# ))
-# ArbBot.testLogging()
