@@ -3,20 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-macro spawn_showerr(ex)
-    esc(quote
-        Threads.@spawn try
-            eval($ex)
-        catch err
-            @error "Something went wrong" err
-            # https://github.com/JuliaLang/julia/pull/48282#issuecomment-1426083522
-            for line in ["[$ii] $frame" for (ii, frame) in enumerate(stacktrace(catch_backtrace()))]
-                @error line
-            end
-            rethrow(err)
-        end
-    end)
-end
+import ..Bots: @spawn_showerr, @smart_assert_showerr
 
 Base.exit_on_sigint(false)
 
@@ -53,12 +40,7 @@ function execute!(botData, bet)
 
     botData -= bet.amount
 
-    try 
-        @smart_assert bet.outcome == response.outcome
-    catch err
-        @error err.msg
-        rethrow(err)
-    end
+    @smart_assert_showerr bet.outcome == response.outcome
 
     if response.shares / bet.shares < 0.1 && response.probAfter > 0.02
         @error bet.id # hyperlink
@@ -136,7 +118,7 @@ function setup(live, confirmBets)
 end
 
 pushJSON = JSON3.write(
-	Dict("topic"=> "realtime:live-bets", 
+	Dict("topic"=> "realtime:live-bets-", 
 		"event"=>"phx_join", 
 		"payload"=>Dict(
 			"config"=>Dict("broadcast"=>Dict("ack"=> false, "self"=> false), 
@@ -202,8 +184,8 @@ function production(; live=true, confirmBets=false)
                             return nothing
                         end
                         
-                        if bet.fills[end].timestamp/1000 < time() - 10
-                            @debug "Bet happened over 10s ago, $(bet.fills[end].timestamp) in unix time"
+                        if bet.createdTime/1000 < time() - 10
+                            @debug "Bet happened over 10s ago, $(bet.createdTime) in unix time"
                             return nothing
                         end
 
@@ -397,31 +379,3 @@ function retryProd(; live=true, confirmBets=false)
         end
     end
 end
-
-function testLogging()
-    @info("You won't see this")
-    @warn("won't see this either")
-    @error("You will only see this")
-    @debug "test"
-    try 
-        @smart_assert 1 != 1
-    catch err
-        @error err.msg
-        # rethrow(err)
-    end
-end
-
-# Need to run manually
-# using Logging, LoggingExtras, Dates
-
-# timestamp_logger(logger) = TransformerLogger(logger) do log
-#     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
-# end
-# const DIR = "H:\\Code\\ManifoldMarkets.jl\\Bots\\src\\logs-Extremities"
-# global_logger(TeeLogger(
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Info)),
-#     EarlyFilteredLogger(Bots.not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug)),
-#     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd")).log"), Logging.Debug))
-# ))
-# Extremities.testLogging()
