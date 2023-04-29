@@ -68,7 +68,7 @@ try
         @sync begin
             @async throw(ArgumentError)
             @async for i in 1:2
-                sleep(5)
+                sleep(1)
                 println("oops")
             end
         end
@@ -79,6 +79,100 @@ try
 catch err
     println("Caught")
     # rethrow()
+finally
+    println("done")
+end
+
+function wait_until(c, timeout::Real) # `c` is any object that is both wait-able and cancel-able (e.g. any IO or a Channel, etc.)
+    timer = Timer(timeout) do t
+        isready(c) || close(c)
+    end
+    try
+        return wait(c)
+    finally
+        close(timer)
+    end
+end
+
+function wait_until(c::Condition, timeout::Real) # `c` is any object that is both wait-able and cancel-able (e.g. any IO or a Channel, etc.)
+    timer = Timer(timeout) do _
+        notify(c)
+    end
+    try
+        return wait(c)
+    finally
+        close(timer)
+    end
+end
+
+try 
+    try
+        @sync begin
+            # x = Condition()
+            @async throw(ArgumentError)
+            @async begin 
+                println(wait_until(x, 2))
+            end
+        end
+    catch
+        println("Caught 1")
+        rethrow()
+    end
+catch err
+    println("Caught")
+    # rethrow()
+finally
+    println("done")
+end
+
+try 
+    try
+        Base.Experimental.@sync begin
+            x = Condition()
+            # @async throw(ArgumentError)
+            @async begin 
+                println(wait(x))
+                println(x)
+            end
+            @async begin
+                println("Sleeping")
+                sleep(4)
+                println("Awoken")
+                notify(x)
+            end
+        end
+    catch
+        println("Caught 1")
+        rethrow()
+    end
+catch err
+    println("Caught")
+    # rethrow()
+finally
+    println("done")
+end
+
+try 
+    @sync begin
+        global timer
+        @async begin
+            global timer = Timer(2) do _
+                println("oops")
+            end
+        end
+
+        try
+            @sync begin
+                @async throw(ArgumentError)
+            end
+        catch err
+            println("Caught 1")
+            close(timer)
+            rethrow()
+        end
+    end
+catch err
+    println("Caught")
 finally
     println("done")
 end

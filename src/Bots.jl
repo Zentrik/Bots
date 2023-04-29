@@ -73,6 +73,17 @@ macro smart_assert_showerr(ex, msg=nothing)
     end)
 end
 
+function wait_until(c::Condition, timeout::Real) # `c` is any object that is both wait-able and cancel-able (e.g. any IO or a Channel, etc.)
+    timer = Timer(timeout) do _
+        notify(c)
+    end
+    try
+        return wait(c)
+    finally
+        close(timer)
+    end
+end
+
 function testLogging()
     @info("You won't see this")
     @warn("won't see this either")

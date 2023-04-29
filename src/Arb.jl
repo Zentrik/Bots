@@ -3,7 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-import ..Bots: @async_showerr, @smart_assert_showerr  
+import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until
 
 const FEE = 0.03
 Base.exit_on_sigint(false)
@@ -335,27 +335,20 @@ function getMarkets!(marketDataBySlug, slugs)
 end
 
 function getMarketsUsingId!(marketDataBySlug, slugs) # If we use slugs the request uri is too long
-    try
-        for slug in slugs
-            @smart_assert_showerr !isnothing(marketDataBySlug[slug].id)
-        end
-        
-        contracts_ids = join(map(slug -> marketDataBySlug[slug].id, slugs), ",") # might be faster to index by id
-        # contracts_slugs = join(slugs, ",")
+    for slug in slugs
+        @smart_assert_showerr !isnothing(marketDataBySlug[slug].id)
+    end
+    
+    contracts_ids = join(map(slug -> marketDataBySlug[slug].id, slugs), ",") # might be faster to index by id
+    # contracts_slugs = join(slugs, ",")
 
-        @smart_assert_showerr length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
+    @smart_assert_showerr length(slugs) < 1000 "too many slugs $(length(slugs)), $slugs when fetching markets"
 
-        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
-        responseJSON = JSON3.read(response.body)
+    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=in.($contracts_ids)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+    responseJSON = JSON3.read(response.body)
 
-        for contract in responseJSON
-            updateMarketData!(marketDataBySlug[contract.slug], contract.data)
-        end
-    catch err
-        bt = catch_backtrace()
-        println()
-        showerror(stderr, err, bt)
-        throw(err)
+    for contract in responseJSON
+        updateMarketData!(marketDataBySlug[contract.slug], contract.data)
     end
 end
 
@@ -512,8 +505,8 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
 
         # I think we are able to fetch messages while we're making bets
-        @sync try 
-            for bet in plannedBets 
+        try 
+            @sync for bet in plannedBets 
                 slug = urlToSlug(bet.url)
 
                 @async_showerr begin
@@ -555,26 +548,27 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
 
                         @debug marketDataBySlug[slug].sortedLimitProbs
                     else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
-                        @debug "Removing limit orders on $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                        @debug "Removing limit orders on $slug, $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                         marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
                         marketDataBySlug[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
+                        @debug "Removed limit orders $slug, $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                     end
                 end
 
                 # If data comes in before POST response occurs we don't want to be stuck waiting
                 @async_showerr begin
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
-                    @debug wait(marketDataBySlug[slug].hasUpdated)
+                    @debug wait_until(marketDataBySlug[slug].hasUpdated, 25) # need to have wait_until() otherwise on error will just hang?
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
             end
         catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
+            display_error(err, catch_backtrace())
 
             # What if a bet didn't go througth, thus we must fetch
+            @info "Fetching shares and balance"
             fetchMyShares!(marketDataBySlug, botData.USERID)
+            botData.balance = getUserByUsername(botData.USERNAME).balance
 
             rerun = :PostFailure
         end
@@ -591,29 +585,22 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
 end
 
 function fetchMyShares!(MarketDataBySlug, groupData, USERID)
-    try
-        # https://discourse.julialang.org/t/broadcast-object-property/47104/6
-        contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
+    # https://discourse.julialang.org/t/broadcast-object-property/47104/6
+    contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
 
-        @smart_assert_showerr length(MarketDataBySlug) < 1000
+    @smart_assert_showerr length(MarketDataBySlug) < 1000
 
-        # will fail if we have more than 1000
-        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
-        responseJSON = JSON3.read(response.body)
+    # will fail if we have more than 1000
+    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+    responseJSON = JSON3.read(response.body)
 
-        # what if it returns nothing for some contract? presumably that means we never invested so MarketData should already be correct
+    # what if it returns nothing for some contract? presumably that means we never invested so MarketData should already be correct
 
-        for contract_metrics in responseJSON
-            slug = groupData.contractIdToSlug[contract_metrics.contract_id]
-            for (outcome, shares) in contract_metrics.data.totalShares
-                MarketDataBySlug[slug].shares[outcome] = shares
-            end
+    for contract_metrics in responseJSON
+        slug = groupData.contractIdToSlug[contract_metrics.contract_id]
+        for (outcome, shares) in contract_metrics.data.totalShares
+            MarketDataBySlug[slug].shares[outcome] = shares
         end
-    catch err
-        bt = catch_backtrace()
-        println()
-        showerror(stderr, err, bt)
-        throw(err)
     end
 end
 
@@ -711,6 +698,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             
                             runs += 1
                         end
+
+                        for slug in group.slugs
+                            marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
+                            marketDataBySlug[slug].sortedLimitProbs = MutableOutcomeType(F[], F[])
+                        end
                     end
 
                     @warn "All: Done all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
@@ -753,38 +745,40 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 notify(marketDataBySlug[slug].hasUpdated)
                             end
 
+                            groupIndex = groupData.contractIdToGroupIndex[marketId]
+
                             # oldProb is to check if market moved?
                             # lastOptimisedProb is to prevent rerunning on already optimised market, accounts for getting new market data due to our own bet
-                            if marketDataBySlug[slug].probability ≉ oldProb && marketDataBySlug[slug].probability ≉ marketDataBySlug[slug].lastOptimisedProb && !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                            if marketDataBySlug[slug].probability ≉ oldProb && marketDataBySlug[slug].probability ≉ marketDataBySlug[slug].lastOptimisedProb && !TaskDict[groupIndex].runAgain
                                 
-                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = true, task=TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
+                                TaskDict[groupIndex] = (runAgain = true, task=TaskDict[groupIndex].task)
 
                                 while !istaskdone(currentTask) # say we have 3 tasks A, B, C. A is running when B, C come in so both wait for A to finish. The B runs sets currentTask to itself but C is onlt waiting for A not the new currentTask B so need a while loop.
                                     wait(currentTask)
                                     @debug "Finished waiting for current task, $currentTask, $slug, $(marketDataBySlug[slug].probability)"
                                 end
 
-                                while !istaskdone(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    wait(TaskDict[groupData.contractIdToGroupIndex[marketId]].task)
-                                    @debug "Finished waiting for previous run of market, $(TaskDict[groupData.contractIdToGroupIndex[marketId]].task), $slug, $(marketDataBySlug[slug].probability)"
+                                while !istaskdone(TaskDict[groupIndex].task)
+                                    wait(TaskDict[groupIndex].task)
+                                    @debug "Finished waiting for previous run of market, $(TaskDict[groupIndex].task), $slug, $(marketDataBySlug[slug].probability)"
                                 end
 
                                 # if we've already optimised on this market data
-                                if !TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
+                                if !TaskDict[groupIndex].runAgain
                                     @debug "No need to rerun $slug"
                                     return nothing
                                 end
 
                                 currentTask = current_task()
                                 @debug "current task set to $currentTask, $slug"
-                                TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
-
-                                group = groupData.groups[groupData.contractIdToGroupIndex[marketId]]
+                                TaskDict[groupIndex] = (runAgain = false, task=current_task())
 
                                 if marketDataBySlug[slug].probability ≈ marketDataBySlug[slug].lastOptimisedProb
                                     @debug "market already optimised $slug"
                                     return nothing
                                 end
+
+                                group = groupData.groups[groupIndex]
 
                                 delay = 60
                                 runs = 0
@@ -797,8 +791,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     end 
 
                                     # no need to run any previously queued requests.
-                                    if TaskDict[groupData.contractIdToGroupIndex[marketId]].runAgain
-                                        TaskDict[groupData.contractIdToGroupIndex[marketId]] = (runAgain = false, task=current_task())
+                                    if TaskDict[groupIndex].runAgain
+                                        TaskDict[groupIndex] = (runAgain = false, task=current_task())
                                     end
             
                                     @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
@@ -810,11 +804,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     @debug rerun
                                 end
             
-                                for slug in groupData.groups[groupData.contractIdToGroupIndex[marketId]].slugs
-                                    marketDataBySlug[slug].limitOrders = MutableOutcomeType{Dict{Float32, Vector{Float32}}}(Dict{Float32, Vector{Float32}}(), Dict{Float32, Vector{Float32}}()) # need to reset as we aren't tracking limit orders
-                                    marketDataBySlug[slug].sortedLimitProbs.YES = []
-                                    marketDataBySlug[slug].sortedLimitProbs.NO = []
+                                @debug "Removing limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                                for slug in group.slugs
+                                    marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
+                                    marketDataBySlug[slug].sortedLimitProbs = MutableOutcomeType(F[], F[])
                                 end
+                                @debug "Removed limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                             end
                         end
 
@@ -825,9 +820,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 # HeartBeat
                 @async_showerr while !WebSockets.isclosed(socket)
                     # printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    send(socket, heartbeatJSON)
+                    try
+                        send(socket, heartbeatJSON)
+                    catch
+                        close(socket)
+                    end
                     # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    sleep(30)
+                    sleep(25)
                 end
 
                 # Fetch new balance at 8am
@@ -837,8 +836,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
 
-                    printstyled("1: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
+                    if !WebSockets.isclosed(socket)
+                        printstyled("1: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
 
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
@@ -858,10 +861,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 println("Caught Interrupt")
                 return
             end
-            bt = catch_backtrace()
             println("Caught")
-            showerror(stderr, err, bt)
-            rethrow(err)
+            rethrow()
         finally
             println("Finally")
             if !WebSockets.isclosed(socket)
@@ -890,9 +891,7 @@ function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=fals
         try
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
+            display_error(err, catch_backtrace())
 
             if err isa MethodError || err isa InterruptException
                 throw(err)
