@@ -1,6 +1,4 @@
-using Pkg
-Pkg.activate("Bots")
-using Bots
+using Revise, Bots # need to dev Bots, so don't activate Bots env. Also revise needs to be loaded first
 
 using Logging, LoggingExtras, Dates
 

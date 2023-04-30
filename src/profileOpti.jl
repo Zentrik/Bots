@@ -1,7 +1,8 @@
 using Pkg, Revise
 Pkg.activate("Bots")
 using Bots
-includet("$(@__DIR__)/Arb.jl")
+# includet("$(@__DIR__)/Arb.jl")
+includet("Bots/src/Arb.jl")
 
 function setup()
     groupNames = ["Nuclear Weapons Detonation 2023"]
@@ -100,6 +101,26 @@ fNoLimit!(betAmounts, first(groupData.groups), [marketDataBySlug[slug].p for slu
 @benchmark f!($betAmounts, $((first(groupData.groups))), $marketDataBySlug, $bettableSlugsIndex, $sharesByEvent, $profitsByEvent)
 
 using Cthulhu
+@descend arbitrageGroup(first(groupData.groups), botData, marketDataBySlug, arguments)
+pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
+poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
+@descend fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
+# @descend minimum( fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+
+fClosure = (betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
+# fClosure = (betAmount, _) -> Float64(-minimum( fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)))
+
+fClosure(betAmounts, "")
+@descend fClosure(betAmounts, "")
+
+fExperimental = Base.Experimental.@opaque (betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
+
+fExperimental(betAmounts, "")
+@benchmark fExperimental($betAmounts, "")
+
+@benchmark fClosure($betAmounts, "")
+# @benchmark Float64(-minimum( fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)))
+@benchmark fNoLimit!($betAmounts, $group, $pVec, $poolSOA, $bettableSlugsIndex, $sharesByEvent, $profitsByEvent)
 
 @descend f!(betAmounts, (GroupStatic(first(groupData.groups))), marketDataBySlug, bettableSlugsIndex, sharesByEvent, profitsByEvent)
 

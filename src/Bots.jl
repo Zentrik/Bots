@@ -73,9 +73,9 @@ macro smart_assert_showerr(ex, msg=nothing)
     end)
 end
 
-function wait_until(c::Condition, timeout::Real) # `c` is any object that is both wait-able and cancel-able (e.g. any IO or a Channel, etc.)
+function wait_until(c::Condition, timeout::Real)
     timer = Timer(timeout) do _
-        notify(c)
+        notify(c, "Wait timed out", error=true)
     end
     try
         return wait(c)
@@ -91,6 +91,22 @@ function testLogging()
     @debug "test"
     @smart_assert_showerr 1 != 1
 end
+
+# struct OutcomeType{T}
+#     YES::T
+#     NO::T
+# end
+# Base.getindex(x::OutcomeType, s::Symbol) = getfield(x, s)
+
+mutable struct MutableOutcomeType{T}
+    YES::T
+    NO::T
+end
+
+Base.getindex(x::MutableOutcomeType, s::Symbol) = getfield(x, s)
+Base.setindex!(x::MutableOutcomeType{T}, y, s::Symbol) where T = setfield!(x, s, convert(T, y))
+Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType{T}) where {T<:Number} = x
+Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType) where {T<:Number} = MutableOutcomeType{T}(x.YES, x.NO)
 
 module ArbBot
 include("Arb.jl")

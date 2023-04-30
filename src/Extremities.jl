@@ -3,20 +3,20 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-import ..Bots: @spawn_showerr, @smart_assert_showerr
+import ..Bots: @spawn_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType
 
 Base.exit_on_sigint(false)
 
 @with_kw mutable struct MarketData 
-    shares::Dict{Symbol, Float64} = Dict{Symbol, Float64}(:NO => 0., :YES => 0.)
+    shares::MutableOutcomeType{Float64} = MutableOutcomeType(0, 0)
 end
 
 @with_kw mutable struct BotData @deftype String
-    const APIKEY
-    const Supabase_APIKEY
-    const FIREBASE_APIKEY
-    const USERNAME
-    const USERID
+    APIKEY
+    Supabase_APIKEY
+    FIREBASE_APIKEY
+    USERNAME
+    USERID
     balance::Float64 = 0
 end
 
@@ -53,17 +53,17 @@ function execute!(botData, bet)
     return response, ohno
 end
 
-function updateShares!(MarketData, newBet, BotData)
+function updateShares!(marketData, newBet, BotData)
     MarketData.shares[Symbol(newBet.outcome)] += newBet.shares
 
-    if MarketData.shares[:YES] >= MarketData.shares[:NO]
-        MarketData.shares[:YES] -= MarketData.shares[:NO]
-        BotData.balance += MarketData.shares[:NO]
-        MarketData.shares[:NO] = 0.
-    elseif MarketData.shares[:YES] < MarketData.shares[:NO]
-        MarketData.shares[:NO] -= MarketData.shares[:YES]
-        BotData.balance += MarketData.shares[:YES]
-        MarketData.shares[:YES] = 0.
+    if marketData.shares[:YES] >= marketData.shares[:NO]
+        marketData.shares[:YES] -= marketData.shares[:NO]
+        BotData.balance += marketData.shares[:NO]
+        marketData.shares[:NO] = 0.
+    elseif marketData.shares[:YES] < marketData.shares[:NO]
+        marketData.shares[:NO] -= marketData.shares[:YES]
+        BotData.balance += marketData.shares[:YES]
+        marketData.shares[:YES] = 0.
     end
 end
 
@@ -72,22 +72,18 @@ function stringKeysToSymbol(dict)
 end
 
 function fetchMyPortfolio(botData)
-    try
-        response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$(botData.USERID)", headers= ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
-        responseJSON = JSON3.read(response.body)
+    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$(botData.USERID)", headers= ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
+    responseJSON = JSON3.read(response.body)
 
-        marketById = typeof(Dict("sad" => Extremities.MarketData()))()
-        for user_contract_metrics in responseJSON
-            marketById[user_contract_metrics.contract_id] = MarketData(stringKeysToSymbol(user_contract_metrics.data.totalShares))
+    marketById = typeof(Dict("sad" => MarketData()))()
+    for user_contract_metrics in responseJSON
+        marketById[user_contract_metrics.contract_id] = MarketData()
+        for (outcome, shares) in user_contract_metrics.data.totalShares
+            marketById[user_contract_metrics.contract_id].shares[outcome] = shares
         end
-
-        return marketById
-    catch err
-        bt = catch_backtrace()
-        println()
-        showerror(stderr, err, bt)
-        throw(err)
     end
+
+    return marketById
 end
 
 function readData()
@@ -145,15 +141,20 @@ function production(; live=true, confirmBets=false)
             send(socket, pushJSON)
             @info "Sent Intialisation"
     
-            @sync begin
+            Base.Experimental.@sync begin
                 #Reading messages
                 # should switch to @spawn
                 @spawn_showerr for msg in socket
                     @spawn_showerr begin 
                         msgJSON = JSON3.read(msg)
-                        if !(:payload in keys(msgJSON) && :data in keys(msgJSON.payload))
-                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
-                            return nothing
+                        if !(:data in keys(msgJSON.payload))
+                            if :status in keys(msgJSON.payload) && msgJSON.payload.status == "error"
+                                # @error "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
+                                throw(ErrorException("$(Dates.format(now(), "HH:MM:SS.sss")): $msg"))
+                            else
+                                @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
+                                return nothing
+                            end
                         end
 
                         # FILTER out updates, only want inserts
@@ -240,13 +241,15 @@ function production(; live=true, confirmBets=false)
 
                         timenow = time_ns()
                         response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"], socket_type_tls=OpenSSL.SSLStream)
-                    @info "Getting Market took $((time_ns() - timenow)/10^6) ms"
+                        @info "Getting Market took $((time_ns() - timenow)/10^6) ms"
                         responseJSON = JSON3.read(response.body)[1]
 
                         @debug responseJSON
 
-                        if responseJSON.data.mechanism != "cpmm-1"
-                            @debug "$(responseJSON.data.mechanism) not cpmm-1"
+                        market = responseJSON.data
+
+                        if market.mechanism != "cpmm-1"
+                            @debug "$(market.mechanism) not cpmm-1"
                             return
                         end
 
@@ -255,18 +258,18 @@ function production(; live=true, confirmBets=false)
                             return
                         end
 
-                        if responseJSON.data.closeTime - time() * 1000 < 60*60*1000 + 6.234*60*1000 # closes in an hour
-                            @debug "$marketId closes in $(responseJSON.data.closeTime/1000 - time())s"
+                        if market.closeTime - time() * 1000 < 60*60*1000 + 6.234*60*1000 # closes in an hour
+                            @debug "$marketId closes in $(market.closeTime/1000 - time())s"
                             return
                         end
 
-                        if time() * 1000 - responseJSON.data.createdTime < 1.12654*24*60*60*1000# created a day ago
-                            @debug "$marketId created $(time() - responseJSON.data.createdTime/1000)s ago"
+                        if time() * 1000 - market.createdTime < 1.12654*24*60*60*1000# created a day ago
+                            @debug "$marketId created $(time() - market.createdTime/1000)s ago"
                             return
                         end
 
-                        if isMarketClosed(responseJSON.data)
-                            @debug "$marketId closed, $(responseJSON.data.isResolved), close time is $(responseJSON.data.closeTime)"
+                        if isMarketClosed(market)
+                            @debug "$marketId closed, $(market.isResolved), close time is $(market.closeTime)"
                             return
                         end
 
@@ -285,14 +288,14 @@ function production(; live=true, confirmBets=false)
                             response, ohno = execute!(botData, bet)
                             # handle non cppm-1 markets
 
-                            # sell shares is probability moved too far from extreme
+                            # sell shares if probability moved too far from extreme
 
                             # only works for cpmm-1
                             if ohno 
                                 response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares), socket_type_tls=OpenSSL.SSLStream)
                             else
                                 # Could cause data race
-                                updateShares!(MarketData, response, botData)
+                                updateShares!(marketById, response, botData)
                             end
                         end
 
@@ -302,29 +305,40 @@ function production(; live=true, confirmBets=false)
     
                 # HeartBeat
                 @spawn_showerr while !WebSockets.isclosed(socket)
-                    send(socket, heartbeatJSON)
+                    try
+                        send(socket, heartbeatJSON)
+                    catch
+                        @error "Heartbeat Failed"
+                        rethrow()
+                    end
                     sleep(30)
                 end
 
                 # Fetch new balance at 8am
                 @spawn_showerr while !WebSockets.isclosed(socket)
+                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(5) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                    printstyled("Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
 
+                    if !WebSockets.isclosed(socket)
+                        printstyled("1: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
+
+                    # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
                     timeTo8 = Second(((today() + Time(8) + Minute(10) - now()) ÷ 1000).value)
                     timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
                     sleep(timeTo8)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
 
-                    timeTo8 = Second(((today() + Time(8) + Minute(30) - now()) ÷ 1000).value)
-                    timeTo8 += timeTo8 > Second(0) ? Second(0) : Second(Day(1))
-                    sleep(timeTo8)
-                    printstyled("Fetcing Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    botData.balance = getUserByUsername(botData.USERNAME).balance
+                    if !WebSockets.isclosed(socket)
+                        printstyled("2: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
                 end
             end
         catch err
@@ -332,10 +346,8 @@ function production(; live=true, confirmBets=false)
                 println("Caught Interrupt")
                 return
             end
-            bt = catch_backtrace()
             println("Caught")
-            showerror(stderr, err, bt)
-            rethrow(err)
+            rethrow()
         finally
             println("Finally")
             if !WebSockets.isclosed(socket)
@@ -360,9 +372,7 @@ function retryProd(; live=true, confirmBets=false)
         try
             production(; live=live, confirmBets=confirmBets)
         catch err
-            bt = catch_backtrace()
-            println()
-            showerror(stderr, err, bt)
+            display_error(err, catch_backtrace())
 
             if err isa MethodError || err isa InterruptException
                 throw(err)

@@ -96,7 +96,8 @@ end
 
 function wait_until(c::Condition, timeout::Real) # `c` is any object that is both wait-able and cancel-able (e.g. any IO or a Channel, etc.)
     timer = Timer(timeout) do _
-        notify(c)
+        # notify(c)
+        notify(c, "Wait timed out", error=true)
     end
     try
         return wait(c)
@@ -108,10 +109,10 @@ end
 try 
     try
         @sync begin
-            # x = Condition()
-            @async throw(ArgumentError)
+            x = Condition()
+            # @async throw(ArgumentError)
             @async begin 
-                println(wait_until(x, 2))
+                wait_until(x, 2)
             end
         end
     catch
@@ -120,7 +121,7 @@ try
     end
 catch err
     println("Caught")
-    # rethrow()
+    rethrow()
 finally
     println("done")
 end
@@ -153,8 +154,7 @@ finally
 end
 
 try 
-    @sync begin
-        global timer
+    @sync let timer
         @async begin
             global timer = Timer(2) do _
                 println("oops")

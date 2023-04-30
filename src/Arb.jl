@@ -3,7 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until
+import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType
 
 const FEE = 0.03
 Base.exit_on_sigint(false)
@@ -31,29 +31,15 @@ struct Group
     end
 end
 
-# struct OutcomeType{T}
-#     YES::T
-#     NO::T
-# end
-# Base.getindex(x::OutcomeType, s::Symbol) = getfield(x, s)
-
-mutable struct MutableOutcomeType{T}
-    YES::T
-    NO::T
-end
-
-Base.getindex(x::MutableOutcomeType, s::Symbol) = getfield(x, s)
-Base.setindex!(x::MutableOutcomeType{T}, y, s::Symbol) where T = setfield!(x, s, convert(T, y))
-
 @with_kw mutable struct MarketData 
-    shares::MutableOutcomeType = MutableOutcomeType{F}(0, 0)
+    shares::MutableOutcomeType{F} = MutableOutcomeType(0, 0)
 
     limitOrders::MutableOutcomeType{Dict{F, Vector{F}}} = MutableOutcomeType{Dict{F, Vector{F}}}(Dict(), Dict())
     sortedLimitProbs::MutableOutcomeType{Vector{F}} = MutableOutcomeType{Vector{F}}([], [])
 
     probability::F = -1
     p::F = -1
-    pool::MutableOutcomeType{F} = MutableOutcomeType{F}(0, 0)
+    pool::MutableOutcomeType{F} = MutableOutcomeType(0, 0)
  
     id::String = ""
     url::String = ""
@@ -68,10 +54,10 @@ Base.setindex!(x::MutableOutcomeType{T}, y, s::Symbol) where T = setfield!(x, s,
 end
 
 @with_kw mutable struct BotData @deftype String
-    const APIKEY
-    const Supabase_APIKEY
-    const USERNAME
-    const USERID
+    APIKEY # marking as const seems to break type inference
+    Supabase_APIKEY
+    USERNAME
+    USERID
     balance::F = 0
 end
 
@@ -218,9 +204,7 @@ end
         end
     end
 
-    profitsByEvent .-= fees
-
-    return profitsByEvent
+    return -convert(Float64, minimum(profitsByEvent) - fees) 
 end
 
 function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
@@ -233,7 +217,7 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     if all(slug -> isempty(marketDataBySlug[slug].sortedLimitProbs.YES) && isempty(marketDataBySlug[slug].sortedLimitProbs.NO), group.slugs[bettableSlugsIndex])
         pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
         poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
-        profitF = OptimizationFunction((betAmount, _) -> Float64(-minimum( fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)) ))
+        profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
     else
         profitF = OptimizationFunction((betAmount, _) -> Float64(-minimum( f!(betAmount, group, marketDataBySlug, bettableSlugsIndex, sharesByEvent, profitsByEvent)) ))
     end
@@ -319,12 +303,12 @@ function updateMarketData!(marketData, market)
     marketData.closeTime = market.closeTime
 end
 
-function getMarkets!(marketDataBySlug, slugs)
+function getMarkets!(marketDataBySlug, slugs, Supabase_APIKEY)
     @sync for paritionedSlugs in Iterators.partition(slugs, 20) # 2000 is max characters in uri, so we have about 1900 for slugs, max slug is about 50 : 1900/50 is 38. generous magin to 20
         @async_showerr begin
             contracts_slugs = join(paritionedSlugs, ",")
     
-            response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?slug=in.($contracts_slugs)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
+            response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?slug=in.($contracts_slugs)", headers= ["apikey" => Supabase_APIKEY, "Content-Type" => "application/json"])
             responseJSON = JSON3.read(response.body)
     
             for contract in responseJSON
@@ -357,7 +341,7 @@ getSlugs(groups::Vector{Group}) = mapreduce(group -> group.slugs, vcat, groups)
 
 isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
-function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
+function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
     rerun = :Success
 
     for slug in group.slugs
@@ -504,8 +488,8 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
     if Arguments.live
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
 
-        # I think we are able to fetch messages while we're making bets
         try 
+            # need to add check to see if we're actually receiving messages
             @sync for bet in plannedBets 
                 slug = urlToSlug(bet.url)
 
@@ -565,12 +549,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
         catch err
             display_error(err, catch_backtrace())
 
-            # What if a bet didn't go througth, thus we must fetch
-            @info "Fetching shares and balance"
-            fetchMyShares!(marketDataBySlug, botData.USERID)
-            botData.balance = getUserByUsername(botData.USERNAME).balance
-
-            rerun = :PostFailure
+            return :PostFailure
         end
 
         
@@ -584,11 +563,13 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)
     end
 end
 
-function fetchMyShares!(MarketDataBySlug, groupData, USERID)
-    # https://discourse.julialang.org/t/broadcast-object-property/47104/6
-    contracts = join(Base.broadcasted(getproperty, values(MarketDataBySlug), :id), ",")
+fetchMyShares!(marketDataBySlug, groupData, USERID) = fetchMyShares!(marketDataBySlug,  groupData, USERID, Base.broadcasted(getproperty, values(marketDataBySlug), :id))
 
-    @smart_assert_showerr length(MarketDataBySlug) < 1000
+function fetchMyShares!(marketDataBySlug, groupData, USERID, slugs)
+    # https://discourse.julialang.org/t/broadcast-object-property/47104/6
+    contracts = join(slugs, ",")
+
+    @smart_assert_showerr length(marketDataBySlug) < 1000
 
     # will fail if we have more than 1000
     response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$USERID&contract_id=in.($contracts)", headers= ["apikey" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4aWRyZ2thdHVtbHZmcWF4Y2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE2Njg5OTUzOTgsImV4cCI6MTk4NDU3MTM5OH0.d_yYtASLzAoIIGdXUBIgRAGLBnNow7JG2SoaNMQ8ySg", "Content-Type" => "application/json"])
@@ -599,7 +580,7 @@ function fetchMyShares!(MarketDataBySlug, groupData, USERID)
     for contract_metrics in responseJSON
         slug = groupData.contractIdToSlug[contract_metrics.contract_id]
         for (outcome, shares) in contract_metrics.data.totalShares
-            MarketDataBySlug[slug].shares[outcome] = shares
+            marketDataBySlug[slug].shares[outcome] = shares
         end
     end
 end
@@ -654,7 +635,7 @@ function setup(groupNames, live, confirmBets)
     botBalance = botUser.balance
     botData = BotData(APIKEY, Supabase_APIKEY, USERNAME, USERID, botBalance)
 
-    @time "Fetching Markets" getMarkets!(marketDataBySlug, getSlugs(groups))
+    @time "Fetching Markets" getMarkets!(marketDataBySlug, getSlugs(groups), Supabase_APIKEY)
     contractIdSet = Set(market.id for market in values(marketDataBySlug))
     contractIdToGroupIndex = Dict(marketDataBySlug[slug].id => i for (i, group) in enumerate(groups) for slug in group.slugs)
     contractIdToSlug = Dict(marketDataBySlug[slug].id => slug for group in groups for slug in group.slugs)
@@ -681,7 +662,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             # send(socket, pushJSON("contract_bets"))
             @info "Sent Intialisation"
     
-            @sync begin
+            Base.Experimental.@sync begin # So that we exit on error straight away and close socket
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
@@ -712,9 +693,14 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 @async_showerr for msg in socket
                     @async_showerr begin 
                         msgJSON = JSON3.read(msg)
-                        if !(:payload in keys(msgJSON) && :data in keys(msgJSON.payload))
-                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
-                            return nothing
+                        if !(:data in keys(msgJSON.payload))
+                            if :status in keys(msgJSON.payload) && msgJSON.payload.status == "error"
+                                # @error "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
+                                throw(ErrorException("$(Dates.format(now(), "HH:MM:SS.sss")): $msg"))
+                            else
+                                @debug "$(Dates.format(now(), "HH:MM:SS.sss")): $msg"
+                                return nothing
+                            end
                         end
 
                         market = msgJSON.payload.data.record.data
@@ -788,6 +774,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                     if rerun == :PostFailure
                                         sleep(delay)
                                         delay *= 5
+
+                                        # What if a bet didn't go througth, thus we must fetch
+                                        @info "Fetching shares and balance"
+                                        fetchMyShares!(marketDataBySlug, groupData, botData.USERID, group.slugs)
+                                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                                        getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
                                     end 
 
                                     # no need to run any previously queued requests.
@@ -820,13 +812,16 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 # HeartBeat
                 @async_showerr while !WebSockets.isclosed(socket)
                     # printstyled("Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
+                    @debug "Heartbeat at $(Dates.format(now(), "HH:MM:SS.sss"))"
                     try
                         send(socket, heartbeatJSON)
                     catch
-                        close(socket)
+                        @error "Heartbeat Failed"
+                        rethrow()
                     end
                     # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                    sleep(25)
+                    @debug "Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                    sleep(30)
                 end
 
                 # Fetch new balance at 8am
