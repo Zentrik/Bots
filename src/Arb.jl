@@ -488,71 +488,88 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
     if Arguments.live
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
 
-        try 
-            # need to add check to see if we're actually receiving messages
-            @sync for bet in plannedBets 
-                slug = urlToSlug(bet.url)
-
-                @async_showerr begin
-                    # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
-                    executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
-
-                    botData.balance -= executedBet.amount
-
-                    if ohno
-                        rerun = :UnexpectedBet
-                    end
-
-                    updateShares!(marketDataBySlug[slug], executedBet, botData)
-
-                    if !isnothing(executedBet.fills[end].matchedBetId)
-                        # Limit order might not update in time?
-                        limitOrder = getBet(executedBet.fills[end].matchedBetId, botData.Supabase_APIKEY)
-                        @debug limitOrder
-
-                        amountLeft = zero(F)
-                        sharesLeft = zero(F)
-                        if limitOrder.outcome == "NO"
-                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
-                            amountLeft = sharesLeft * limitOrder.limitProb
-                        elseif limitOrder.outcome == "YES"
-                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
-                            amountLeft = sharesLeft * (1 - limitOrder.limitProb)
-                        end
-
-                        marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(F(limitOrder.limitProb) => F[amountLeft, sharesLeft])
-
-                        @debug marketDataBySlug[slug].limitOrders
-
-                        if executedBet.outcome == "YES"
-                            marketDataBySlug[slug].sortedLimitProbs.YES = [limitOrder.limitProb]
-                        elseif executedBet.outcome == "NO"
-                            marketDataBySlug[slug].sortedLimitProbs.NO = [limitOrder.limitProb]
-                        end
-
-                        @debug marketDataBySlug[slug].sortedLimitProbs
-                    else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
-                        @debug "Removing limit orders on $slug, $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
-                        marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
-                        marketDataBySlug[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
-                        @debug "Removed limit orders $slug, $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
-                    end
-                end
-
+        @sync let timers = Dict{Int64, Timer}()
+            for (i, bet) in enumerate(plannedBets) 
                 # If data comes in before POST response occurs we don't want to be stuck waiting
                 @async_showerr begin
+                    slug = urlToSlug(bet.url)
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
                     # Don't place @debug on wait_until otherwise error is not thrown.
-                    wait_until(marketDataBySlug[slug].hasUpdated, 25) # need to have wait_until() otherwise on error will just hang?
+                    # wait_until(marketDataBySlug[slug].hasUpdated, 60) # need to have wait_until() otherwise on error will just hang?
+                    timers[i] = Timer(60) do _
+                        notify(marketDataBySlug[slug].hasUpdated, "Wait timed out", error=true)
+                    end
+                    try
+                        return wait(marketDataBySlug[slug].hasUpdated)
+                    finally
+                        close(pop!(timers, i))
+                    end
+                    # wait(marketDataBySlug[slug].hasUpdated)
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
             end
-        catch
-            rerun = :PostFailure
-            return :PostFailure
+
+            try 
+                # need to add check to see if we're actually receiving messages
+                @sync for bet in plannedBets 
+                    @async_showerr begin
+                        slug = urlToSlug(bet.url)
+
+                        # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
+                        executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
+
+                        botData.balance -= executedBet.amount
+
+                        if ohno
+                            rerun = :UnexpectedBet
+                        end
+
+                        updateShares!(marketDataBySlug[slug], executedBet, botData)
+
+                        if !isnothing(executedBet.fills[end].matchedBetId)
+                            # Limit order might not update in time?
+                            limitOrder = getBet(executedBet.fills[end].matchedBetId, botData.Supabase_APIKEY)
+                            @debug limitOrder
+
+                            amountLeft = zero(F)
+                            sharesLeft = zero(F)
+                            if limitOrder.outcome == "NO"
+                                sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
+                                amountLeft = sharesLeft * limitOrder.limitProb
+                            elseif limitOrder.outcome == "YES"
+                                sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
+                                amountLeft = sharesLeft * (1 - limitOrder.limitProb)
+                            end
+
+                            marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(F(limitOrder.limitProb) => F[amountLeft, sharesLeft])
+
+                            @debug marketDataBySlug[slug].limitOrders
+
+                            if executedBet.outcome == "YES"
+                                marketDataBySlug[slug].sortedLimitProbs.YES = [limitOrder.limitProb]
+                            elseif executedBet.outcome == "NO"
+                                marketDataBySlug[slug].sortedLimitProbs.NO = [limitOrder.limitProb]
+                            end
+
+                            @debug marketDataBySlug[slug].sortedLimitProbs
+                        else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
+                            @debug "Removing limit orders on $slug, $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                            marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
+                            marketDataBySlug[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
+                            @debug "Removed limit orders $slug, $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                        end
+                    end
+                end
+            catch
+                rerun = :PostFailure
+                for timer in values(timers)
+                    close(timer)
+                end
+
+                return :PostFailure
+            end
         end
 
-        
         for (i, slug) in enumerate(group.slugs)
             marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
         end
@@ -647,7 +664,7 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
-function runGroup(group, botData, marketDataBySlug, arguments)
+function runGroup(group, groupData, botData, marketDataBySlug, arguments)
     delay = 60
     runs = 0
     rerun = :FirstRun
@@ -700,7 +717,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
                     for group in groupData.groups            
-                        runGroup(group, botData, marketDataBySlug, arguments)
+                        runGroup(group, groupData, botData, marketDataBySlug, arguments)
 
                         for slug in group.slugs
                             marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
@@ -789,7 +806,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 group = groupData.groups[groupIndex]
 
                                 @debug "current prob $(marketDataBySlug[slug].probability)"
-                                runGroup(group, botData, marketDataBySlug, arguments)
+                                runGroup(group, groupData, botData, marketDataBySlug, arguments)
 
                                 # no need to run any previously queued requests.
                                 if TaskDict[groupIndex].runAgain

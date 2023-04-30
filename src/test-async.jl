@@ -112,13 +112,35 @@ function test()
         @sync for i in 1:2
             x = Condition()
             # @async throw(ArgumentError)
-            Bots.@async_showerr println(i)
+            Bots.@async_showerr println("1 $i")
             Bots.@async_showerr begin 
                 # @debug Bots.wait_until(x, 2)
-                Bots.wait_until(x, 2)
+                Bots.wait_until(x, 5)
             end
+            Bots.@async_showerr println("2 $i")
         end
-    catch
+    catch err
+        println("Caught 1")
+        return :Fail
+    end
+
+    return rerun
+end
+
+function test()
+    rerun = :A
+    try
+        @sync for i in 1:2
+            x = Condition()
+            # @async throw(ArgumentError)
+            @async println("1 $i")
+            @async begin 
+                # @debug Bots.wait_until(x, 2)
+                Bots.wait_until(x, 5)
+            end
+            @async println("2 $i")
+        end
+    catch err
         println("Caught 1")
         return :Fail
     end
@@ -258,4 +280,13 @@ end
             println(i)
         end
     end
+end
+
+@sync try 
+    # need to add check to see if we're actually receiving messages
+    @sync for i in 1:2
+        Bots.@async_showerr throw(ArgumentError(i))
+    end
+catch
+    return :PostFailure
 end
