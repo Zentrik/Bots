@@ -542,13 +542,13 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
                 # If data comes in before POST response occurs we don't want to be stuck waiting
                 @async_showerr begin
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
-                    @debug wait_until(marketDataBySlug[slug].hasUpdated, 25) # need to have wait_until() otherwise on error will just hang?
+                    # Don't place @debug on wait_until otherwise error is not thrown.
+                    wait_until(marketDataBySlug[slug].hasUpdated, 25) # need to have wait_until() otherwise on error will just hang?
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
             end
-        catch err
-            display_error(err, catch_backtrace())
-
+        catch
+            rerun = :PostFailure
             return :PostFailure
         end
 
@@ -647,6 +647,39 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
+function runGroup(group, botData, marketDataBySlug, arguments)
+    delay = 60
+    runs = 0
+    rerun = :FirstRun
+
+    numberOfPostFailures = 0
+
+    while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
+        if rerun == :PostFailure
+            numberOfPostFailures += 1
+            if numberOfPostFailures >= 2
+                throw(ErrorException("Multiple failures to create bets."))
+            end
+
+            sleep(delay)
+            delay *= 5
+
+            # What if a bet didn't go througth, thus we must fetch
+            @info "Fetching shares and balance"
+            fetchMyShares!(marketDataBySlug, groupData, botData.USERID, group.slugs)
+            botData.balance = getUserByUsername(botData.USERNAME).balance
+            getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
+        end
+
+        @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+        @debug [marketDataBySlug[slug].p for slug in group.slugs]
+        @debug [marketDataBySlug[slug].pool for slug in group.slugs]
+        runs += 1
+        rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
+        @debug rerun
+    end
+end
+
 function production(groupNames = nothing; live=true, confirmBets=false, skip=false)
     # Should probably move this into the websocket as well
     groupData, botData, marketDataBySlug, arguments = setup(groupNames, live, confirmBets)
@@ -667,18 +700,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
                     for group in groupData.groups            
-                        rerun = :FirstRun
-                        runs = 0
-                        
-                        while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
-                            @warn "All: Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-
-                            # Need to wait for current bet to finish before rerunning
-                            # this isn't async so surely not a problem
-                            rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
-            
-                            runs += 1
-                        end
+                        runGroup(group, botData, marketDataBySlug, arguments)
 
                         for slug in group.slugs
                             marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
@@ -766,34 +788,12 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                                 group = groupData.groups[groupIndex]
 
-                                delay = 60
-                                runs = 0
-                                rerun = :FirstRun
+                                @debug "current prob $(marketDataBySlug[slug].probability)"
+                                runGroup(group, botData, marketDataBySlug, arguments)
 
-                                while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 10) || rerun == :PostFailure
-                                    if rerun == :PostFailure
-                                        sleep(delay)
-                                        delay *= 5
-
-                                        # What if a bet didn't go througth, thus we must fetch
-                                        @info "Fetching shares and balance"
-                                        fetchMyShares!(marketDataBySlug, groupData, botData.USERID, group.slugs)
-                                        botData.balance = getUserByUsername(botData.USERNAME).balance
-                                        getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
-                                    end 
-
-                                    # no need to run any previously queued requests.
-                                    if TaskDict[groupIndex].runAgain
-                                        TaskDict[groupIndex] = (runAgain = false, task=current_task())
-                                    end
-            
-                                    @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                                    @debug "current prob $(marketDataBySlug[slug].probability)"
-                                    @debug [marketDataBySlug[slug].p for slug in group.slugs]
-                                    @debug [marketDataBySlug[slug].pool for slug in group.slugs]
-                                    runs += 1
-                                    rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
-                                    @debug rerun
+                                # no need to run any previously queued requests.
+                                if TaskDict[groupIndex].runAgain
+                                    TaskDict[groupIndex] = (runAgain = false, task=current_task())
                                 end
             
                                 @debug "Removing limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"

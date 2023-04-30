@@ -106,12 +106,32 @@ function wait_until(c::Condition, timeout::Real) # `c` is any object that is bot
     end
 end
 
+function test()
+    rerun = :A
+    try
+        @sync for i in 1:2
+            x = Condition()
+            # @async throw(ArgumentError)
+            Bots.@async_showerr println(i)
+            Bots.@async_showerr begin 
+                # @debug Bots.wait_until(x, 2)
+                Bots.wait_until(x, 2)
+            end
+        end
+    catch
+        println("Caught 1")
+        return :Fail
+    end
+
+    return rerun
+end
+
 try 
     try
         @sync begin
             x = Condition()
             # @async throw(ArgumentError)
-            @async begin 
+            @async_showerr begin 
                 wait_until(x, 2)
             end
         end
