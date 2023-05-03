@@ -89,7 +89,7 @@ function execute(bet, currentProb, APIKEY)
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
 
-    @smart_assert_showerr bet.outcome == response.outcome
+    @smart_assert_showerr bet.outcome == response.outcome "$(bet.outcome), $(response.outcome)"
 
     if !isapprox(response.shares, bet.shares, atol=1e-2)
         @error "\e]8;;$(bet.url)\e\\$(bet.question)\e]8;;\e\\\n" # hyperlink

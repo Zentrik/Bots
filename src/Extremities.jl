@@ -40,7 +40,7 @@ function execute!(botData, bet)
 
     botData.balance -= bet.amount
 
-    @smart_assert_showerr bet.outcome == response.outcome
+    @smart_assert_showerr String(bet.outcome) == response.outcome "$(bet.outcome), $(response.outcome)"
 
     if response.shares / bet.shares < 0.1 && (response.probAfter > 0.02 || response.probAfter < .98)
         @error bet.id # hyperlink
@@ -72,7 +72,7 @@ function stringKeysToSymbol(dict)
 end
 
 function fetchMyPortfolio(botData)
-    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$(botData.USERID)", headers= ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"])
+    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/user_contract_metrics?user_id=eq.$(botData.USERID)", headers= ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json", "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"])
     responseJSON = JSON3.read(response.body)
 
     marketById = typeof(Dict("sad" => MarketData()))()
@@ -132,7 +132,7 @@ isMarketClosed(market) = market.isResolved || market.closeTime / 1000 < time() #
 function production(; live=true, confirmBets=false)
     marketById, botData, arguments, smartUsers, dumbUsers = setup(live, confirmBets)
 
-    WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
+    WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true) do socket
         try
             @info "Opened Socket"
             @debug socket
@@ -198,15 +198,15 @@ function production(; live=true, confirmBets=false)
 
                     oppositeOutcome = outcome == :YES ? :NO : :YES
 
-                    if marketId in keys(marketById) && marketById[marketId].shares[oppositeOutcome] > 0
-                        bet = PlannedBet(20, marketById[marketId].shares[oppositeOutcome], outcome, marketId)
-                        response, ohno = execute!(botData, bet)
+                    # if marketId in keys(marketById) && marketById[marketId].shares[oppositeOutcome] > 0
+                    #     bet = PlannedBet(20, marketById[marketId].shares[oppositeOutcome], outcome, marketId)
+                    #     response, ohno = execute!(botData, bet)
 
-                        # Too annoying to get token every time it expires
-                        # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=>oppositeOutcome, "shares" => marketById[marketId].shares[oppositeOutcome]), socket_type_tls=OpenSSL.SSLStream)
+                    #     # Too annoying to get token every time it expires
+                    #     # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=>oppositeOutcome, "shares" => marketById[marketId].shares[oppositeOutcome]), socket_type_tls=OpenSSL.SSLStream)
 
-                        updateShares!(marketById[marketId], response, botData)
-                    end
+                    #     updateShares!(marketById[marketId], response, botData)
+                    # end
                     # continue on so we bet more if big prob change
 
 
@@ -246,7 +246,7 @@ function production(; live=true, confirmBets=false)
                         if marketById[marketId].shares[outcome] > 1 
                             @debug "$(marketById[marketId].shares[outcome]) already own shares, $marketId, $(marketById[marketId].shares), $outcome"
                             continue
-                        elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 500 # should not be called any more
+                        elseif marketById[marketId].shares[outcome == :YES ? :NO : :YES] > 500
                             amount = 40.
                         end
                     else
@@ -260,7 +260,7 @@ function production(; live=true, confirmBets=false)
                     end
 
                     timenow = time_ns()
-                    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json"], socket_type_tls=OpenSSL.SSLStream)
+                    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json", "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"], socket_type_tls=OpenSSL.SSLStream)
                     @info "Getting Market took $((time_ns() - timenow)/10^6) ms"
                     responseJSON = JSON3.read(response.body)[1]
 
