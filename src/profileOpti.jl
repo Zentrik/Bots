@@ -106,6 +106,7 @@ pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
 poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
 @descend fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
 # @descend minimum( fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+@descend solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.25)
 
 fClosure = (betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
 # fClosure = (betAmount, _) -> Float64(-minimum( fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)))

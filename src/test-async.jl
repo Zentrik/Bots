@@ -106,6 +106,23 @@ function wait_until(c::Condition, timeout::Real) # `c` is any object that is bot
     end
 end
 
+function testCatch()
+    try
+        @sync begin
+            # @async throw(ArgumentError)
+            @async begin 
+                Bots.wait_until(Condition(), 2)
+            end
+        end
+    catch err
+        # for e in err
+        #     println(e)
+        # end
+        # println(err)
+        return err
+    end
+end
+
 function test()
     rerun = :A
     try
@@ -289,4 +306,71 @@ end
     end
 catch
     return :PostFailure
+end
+
+try
+    throw(ArgumentError)
+finally
+    println(first(current_exceptions()).exception)
+end
+
+function testRethrow()
+    try
+        try
+            throw(ArgumentError)
+        finally
+            println("Finally")
+            println(err)
+        end
+    catch
+        println("Caught")
+    end
+end
+
+using HTTP.WebSockets
+import ..Bots: display_error
+function testSocket()
+    error = false
+
+    WebSockets.open("wss://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self") do socket
+        try
+            throw(ArgumentError)
+        finally
+            error = current_exceptions()
+            println("Finally")
+            if !WebSockets.isclosed(socket)
+                println("Left Channel")
+    
+                close(socket)
+            end
+        end
+    end
+    
+    return error
+end
+
+function testSocket()
+    WebSockets.open("wss://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self", suppress_close_error=true) do socket
+        try
+            throw(MethodError)
+        finally
+            println("Finally")
+            close(socket)
+        end
+    end
+end
+
+import ..Bots: display_error
+function testSocketPrint()
+    try
+        testSocket()
+    catch
+        # println(typeof(err))
+        # println(current_exceptions())
+        # display_error(err, catch_backtrace())
+        # return err
+        for error in reverse(current_exceptions())
+            display_error(error.exception, error.backtrace)
+        end
+    end
 end

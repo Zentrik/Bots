@@ -207,6 +207,8 @@ end
     return -convert(Float64, minimum(profitsByEvent) - fees) 
 end
 
+using FunctionWrappers
+import FunctionWrappers: FunctionWrapper
 function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     noShares = [marketDataBySlug[slug].shares.NO for slug in group.slugs]
     yesShares = [marketDataBySlug[slug].shares.YES for slug in group.slugs]
@@ -214,10 +216,17 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
 
     profitsByEvent = similar(sharesByEvent)
 
+    # pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
+    # poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
+    # p = (group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
+
     if all(slug -> isempty(marketDataBySlug[slug].sortedLimitProbs.YES) && isempty(marketDataBySlug[slug].sortedLimitProbs.NO), group.slugs[bettableSlugsIndex])
         pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
         poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
-        profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+        # profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+        # profitF = OptimizationFunction((betAmount, p) -> fNoLimit!(betAmount, (; group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)...))
+        # profitF = OptimizationFunction(FunctionWrapper{Float64, Tuple{Vector{F}, Tuple{Group, Vector{F}, StructVector{MutableOutcomeType{F}, NamedTuple{(:YES, :NO), Tuple{Vector{F}, Vector{F}}}, Int64}, Vector{Int64}, Vector{F}, Vector{F}}}}((betAmount, p) -> fNoLimit!(betAmount, (; group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)...)))
+        profitF = OptimizationFunction(FunctionWrapper{Float64, Tuple{Vector{F}}}((betAmount,) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)))
     else
         profitF = OptimizationFunction((betAmount, _) -> Float64(-minimum( f!(betAmount, group, marketDataBySlug, bettableSlugsIndex, sharesByEvent, profitsByEvent)) ))
     end
@@ -229,10 +238,10 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     ub = F[marketDataBySlug[slug].probability > .98 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
     lb = F[marketDataBySlug[slug].probability < .03 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
-    problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
+    problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)#, abstol=1e-3, MaxStepsWithoutProgress=10^3)
 
     @debug "Running adaptive for $(group.name)"
-    @time "Adaptive 1" sol = solve(problem, BBO_adaptive_de_rand_1_bin_radiuslimited(), maxtime=.5)
+    @time "Adaptive 1" sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.1)
 
     @debug "Yielding after adaptive, $(group.name)"
     yield()
@@ -262,7 +271,7 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     if bestSolution == repeat([0.], length(bettableSlugsIndex))
         @debug "Running resampling for $(group.name)"
 
-        @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=3)
+        @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=.5)
         
         @debug "Yielding after resampling, $(group.name)"
         yield()
@@ -301,6 +310,10 @@ function updateMarketData!(marketData, market)
 
     marketData.isResolved = market.isResolved
     marketData.closeTime = market.closeTime
+    if market.lastBetTime < marketData.lastBetTime
+        throw(ErrorException("Updated with old market data?, $(marketData.lastBetTime), $(market.lastBetTime), $marketData, $market"))
+    end
+    marketData.lastBetTime = market.lastBetTime
 end
 
 function getMarkets!(marketDataBySlug, slugs, Supabase_APIKEY)
@@ -487,87 +500,87 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
 
     if Arguments.live
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
+        timers = Vector{Timer}(undef, length(plannedBets))
 
-        @sync let timers = Dict{Int64, Timer}()
-            for (i, bet) in enumerate(plannedBets) 
-                # If data comes in before POST response occurs we don't want to be stuck waiting
+        try 
+            # need to add check to see if we're actually receiving messages
+            @sync for (i, bet) in enumerate(plannedBets) 
                 @async_showerr begin
                     slug = urlToSlug(bet.url)
+
+                    # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
+                    executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
+
+                    botData.balance -= executedBet.amount
+
+                    if ohno
+                        rerun = :UnexpectedBet
+                    end
+
+                    updateShares!(marketDataBySlug[slug], executedBet, botData)
+
+                    if !isnothing(executedBet.fills[end].matchedBetId)
+                        # Limit order might not update in time?
+                        limitOrder = getBet(executedBet.fills[end].matchedBetId, botData.Supabase_APIKEY)
+                        @debug limitOrder
+
+                        amountLeft = zero(F)
+                        sharesLeft = zero(F)
+                        if limitOrder.outcome == "NO"
+                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
+                            amountLeft = sharesLeft * limitOrder.limitProb
+                        elseif limitOrder.outcome == "YES"
+                            sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
+                            amountLeft = sharesLeft * (1 - limitOrder.limitProb)
+                        end
+
+                        marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(F(limitOrder.limitProb) => F[amountLeft, sharesLeft])
+
+                        @debug marketDataBySlug[slug].limitOrders
+
+                        if executedBet.outcome == "YES"
+                            marketDataBySlug[slug].sortedLimitProbs.YES = [limitOrder.limitProb]
+                        elseif executedBet.outcome == "NO"
+                            marketDataBySlug[slug].sortedLimitProbs.NO = [limitOrder.limitProb]
+                        end
+
+                        @debug marketDataBySlug[slug].sortedLimitProbs
+                    else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
+                        @debug "Removing limit orders on $slug, $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                        marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
+                        marketDataBySlug[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
+                        @debug "Removed limit orders $slug, $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
+                    end
+
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
                     # Don't place @debug on wait_until otherwise error is not thrown.
-                    # wait_until(marketDataBySlug[slug].hasUpdated, 60) # need to have wait_until() otherwise on error will just hang?
                     timers[i] = Timer(60) do _
-                        notify(marketDataBySlug[slug].hasUpdated, "Wait timed out", error=true)
+                        notify(marketDataBySlug[slug].hasUpdated, "Wait timed out waiting for new bet, $(executedBet.createdTime), $(marketDataBySlug[slug].lastBetTime)", error=true)
                     end
                     try
-                        return wait(marketDataBySlug[slug].hasUpdated)
+                        while marketDataBySlug[slug].lastBetTime < executedBet.createdTime
+                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting for new bet, $(executedBet.createdTime), $(marketDataBySlug[slug].lastBetTime)"
+                            wait(marketDataBySlug[slug].hasUpdated)
+                        end
                     finally
-                        close(pop!(timers, i))
+                        close(timers[i])
                     end
-                    # wait(marketDataBySlug[slug].hasUpdated)
+
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
             end
-
-            try 
-                # need to add check to see if we're actually receiving messages
-                @sync for bet in plannedBets 
-                    @async_showerr begin
-                        slug = urlToSlug(bet.url)
-
-                        # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
-                        executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
-
-                        botData.balance -= executedBet.amount
-
-                        if ohno
-                            rerun = :UnexpectedBet
-                        end
-
-                        updateShares!(marketDataBySlug[slug], executedBet, botData)
-
-                        if !isnothing(executedBet.fills[end].matchedBetId)
-                            # Limit order might not update in time?
-                            limitOrder = getBet(executedBet.fills[end].matchedBetId, botData.Supabase_APIKEY)
-                            @debug limitOrder
-
-                            amountLeft = zero(F)
-                            sharesLeft = zero(F)
-                            if limitOrder.outcome == "NO"
-                                sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / (1 - limitOrder.limitProb)
-                                amountLeft = sharesLeft * limitOrder.limitProb
-                            elseif limitOrder.outcome == "YES"
-                                sharesLeft = (limitOrder.orderAmount - limitOrder.amount) / limitOrder.limitProb
-                                amountLeft = sharesLeft * (1 - limitOrder.limitProb)
-                            end
-
-                            marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict(F(limitOrder.limitProb) => F[amountLeft, sharesLeft])
-
-                            @debug marketDataBySlug[slug].limitOrders
-
-                            if executedBet.outcome == "YES"
-                                marketDataBySlug[slug].sortedLimitProbs.YES = [limitOrder.limitProb]
-                            elseif executedBet.outcome == "NO"
-                                marketDataBySlug[slug].sortedLimitProbs.NO = [limitOrder.limitProb]
-                            end
-
-                            @debug marketDataBySlug[slug].sortedLimitProbs
-                        else # Should only happen if theres a limit order that we expected to hit but ended up not, e.g. user runs out of balance.
-                            @debug "Removing limit orders on $slug, $(executedBet.outcome), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
-                            marketDataBySlug[slug].limitOrders[Symbol(executedBet.outcome)] = Dict()
-                            marketDataBySlug[slug].sortedLimitProbs[Symbol(executedBet.outcome)] = []
-                            @debug "Removed limit orders $slug, $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
-                        end
-                    end
-                end
-            catch
-                rerun = :PostFailure
-                for timer in values(timers)
-                    close(timer)
-                end
-
-                return :PostFailure
+        catch err
+            for timer in timers
+                close(timer)
             end
+            for e in err
+                if startswith(e.task.exception, "Wait timed out waiting for new bet")
+                    rethrow()
+                end
+            end
+            rerun = :PostFailure
+
+            return :PostFailure
         end
 
         for (i, slug) in enumerate(group.slugs)
@@ -704,6 +717,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
     TaskDict = Dict(i => (runAgain=false, task=@async nothing) for i in eachindex(groupData.groups)) # so we don't have to check if there is a task in it or not. Order of tuple matters for parsing
 
     # currentTask = @async nothing
+
+    errorOccurred = false
     WebSockets.open(uri(botData.Supabase_APIKEY)) do socket
         try
             @info "Opened Socket"
@@ -716,7 +731,10 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
                 currentTask = @async_showerr if !skip
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                    for group in groupData.groups            
+                    for group in groupData.groups       
+                        if errorOccurred
+                            break
+                        end     
                         runGroup(group, groupData, botData, marketDataBySlug, arguments)
 
                         for slug in group.slugs
@@ -752,8 +770,6 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             slug = groupData.contractIdToSlug[marketId] #market.slug also works
                             oldProb = marketDataBySlug[slug].probability
 
-                            updateMarketData!(marketDataBySlug[slug], market)
-
                             # println("Received message: $(market.lastBetTime)")
                             # @warn slug
                             if marketDataBySlug[slug].probability ≉ oldProb
@@ -761,14 +777,24 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             end
                             # @warn "from prob $(market.prob)"
 
+                            if market.lastBetTime < marketDataBySlug[slug].lastBetTime
+                                @debug "Old bet? $(market.lastBetTime), $(marketDataBySlug[slug].lastBetTime) for $slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                                return nothing
+                            end
+                            updateMarketData!(marketDataBySlug[slug], market)
+
                             # Should probably only do this if market data actually changed
                             # probability won't change if we are hitting a limit order
-                            if marketDataBySlug[slug].lastBetTime < market.lastBetTime
-                                marketDataBySlug[slug].lastBetTime = market.lastBetTime
 
-                                @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability) with $(market.lastBetTime)"
-                                notify(marketDataBySlug[slug].hasUpdated)
+                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability) with $(market.lastBetTime)"
+
+                            # Big probem if we receive bets delayed, if bet delayed by 10s just kill program
+                            # Problem, when a bet is made we receive ~3 messages and the first couple may not have updated lastBetTime
+                            if market.lastBetTime < (time() - 10) * 10^3 
+                                return nothing
+                                # throw(ErrorException("Got very old bet on $slug, $market at $(time())"))
                             end
+                            notify(marketDataBySlug[slug].hasUpdated)
 
                             groupIndex = groupData.contractIdToGroupIndex[marketId]
 
@@ -868,23 +894,13 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     end
                 end
             end
-        catch err
-            if err isa InterruptException
-                println("Caught Interrupt")
-                return
-            end
-            println("Caught")
-            rethrow()
         finally
+            errorOccurred = true
             println("Finally")
             if !WebSockets.isclosed(socket)
                 send(socket, leaveJSON())
                 println("Left Channel")
-    
-                # msg = receive(socket)
-                # println("Received message: $msg")
-                # println("Received message: $(JSON.parse(String(msg)))")
-    
+        
                 close(socket)
             end
         end
@@ -895,18 +911,27 @@ function test(groupNames = nothing; live=false, confirmBets=true, skip=false)
     production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
 end
 
-function retryProd(groupNames = nothing; live=true, confirmBets=false, skip=false)
+function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, skip=false)
     delay = 60
     lastRunTime = time()
 
-    while true
+    while run in 1:runs
         try
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
-        catch err
-            display_error(err, catch_backtrace())
+        catch
+            for error in current_exceptions()
+                display_error(error.exception, error.backtrace)
+            end
 
-            if err isa MethodError || err isa InterruptException
-                throw(err)
+            println(Dates.format(now(), "HH:MM:SS.sss"))
+
+            for error in current_exceptions()
+                if error.exception isa MethodError || error.exception isa InterruptException
+                    break
+                end
+            end
+
+            if run == runs
                 break
             end
             
