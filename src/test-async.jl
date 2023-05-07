@@ -374,3 +374,53 @@ function testSocketPrint()
         end
     end
 end
+
+function shouldBreak(exception)
+    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch
+        return true
+    elseif exception isa TaskFailedException
+        return shouldBreak(exception.task.exception)
+    elseif exception isa CompositeException
+        return any(shouldBreak.(exception.exceptions))
+    else
+        return false
+    end
+end
+
+function testBreak()
+    try
+        try
+            # throw(MethodError("", ""))
+            sleep("")
+        finally
+            println("Finally")
+        end
+    catch err
+        println(err)
+        for (exception, _) in current_exceptions()
+            if shouldBreak(exception)
+                println("Broke")
+                return nothing
+            end
+        end
+    end
+end
+
+function testAsyncBreak()
+    try
+        @sync try
+            @async throw(MethodError("", ""))
+        finally
+            println("Finally")
+        end
+    catch err
+        println(err)
+
+        for (exception, _) in current_exceptions()
+            if shouldBreak(exception)
+                println("Broke")
+                return nothing
+            end
+        end
+    end
+end

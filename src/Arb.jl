@@ -636,7 +636,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         end
 
         println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
-        println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+        println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
         @info String(take!(buffer))
 
         for (i, slug) in enumerate(group.slugs)
@@ -983,6 +983,18 @@ function test(groupNames = nothing; live=false, confirmBets=true, skip=false)
     production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
 end
 
+function shouldBreak(exception)
+    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch
+        return true
+    elseif exception isa TaskFailedException
+        return shouldBreak(exception.task.exception)
+    elseif exception isa CompositeException
+        return any(shouldBreak.(exception.exceptions))
+    else
+        return false
+    end
+end
+
 function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, skip=false)
     delay = 60
     lastRunTime = time()
@@ -991,17 +1003,20 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
         try
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch
-            # for error in current_exceptions()
-            #     display_error(error.exception, error.backtrace)
-            # end
+            tmp = false
+            tmp = for (exception, _) in current_exceptions()
+                if shouldBreak(exception)
+                    return true
+                end
+            end
+
+            if tmp == true
+                break
+            end
 
             println(Dates.format(now(), "HH:MM:SS.sss"))
 
-            for error in current_exceptions()
-                if error.exception isa MethodError || error.exception isa InterruptException
-                    break
-                end
-            end
+            breakOnError(current_exceptions())
 
             if run == runs
                 break
