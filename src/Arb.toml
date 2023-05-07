@@ -116,9 +116,10 @@ USERNAME = "BottieMcBotface"
 # "https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["YES", "NO"]
 
 [GROUPS."Musk Richest Man"]
-"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO"]
-"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO"]
-"https://manifold.markets/Nostradamnedus/will-elon-musk-be-the-worlds-riches" = ["YES", "NO"]
+"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i-7f9a0ec3e42e" = ["YES", "NO", "NO"]
+"https://manifold.markets/ShakedKoplewitz/will-elon-musk-be-the-richest-man-i" = ["YES", "NO", "NO"]
+"https://manifold.markets/Nostradamnedus/will-elon-musk-be-the-worlds-riches" = ["YES", "NO", "NO"]
+"https://manifold.markets/itsTomekK/2023-will-elon-musk-become-the-rich" = ["YES", "YES", "NO"]
 
 [GROUPS."Nuclear Weapons Detonation 2023"] # (feb16, april, june 9, july, 2023) North korea, (july, 2023) anywhere else, other
 "https://manifold.markets/jack/will-a-nuclear-weapon-be-detonated-49edd0c42325" = ["YES", "YES", "YES", "YES", "NO", "YES", "NO", "NO"]
@@ -492,3 +493,28 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/KevinBurke/will-sergio-perez-win-the-2023-form-4030fa15c096" = ["NO", "YES", "NO", "NO"]
 "https://manifold.markets/KevinBurke/will-a-nonred-bull-driver-win-the-2" = ["NO", "NO", "YES", "YES"]
 "https://manifold.markets/HiddeJonkers/will-redbull-have-a-double-dnf-befo" = ["NO", "NO", "NO", "YES"]
+
+[GROUPS."OpenAI Assist Clause"]
+"https://manifold.markets/MetaculusBot/will-openai-have-triggered-its-assi-ffd373939394" = ["YES", "YES", "NO"]
+"https://manifold.markets/MetaculusBot/will-openai-have-triggered-its-assi" = ["YES", "NO", "NO"]
+
+[GROUPS."China Blockade Taiwan"]
+"https://manifold.markets/MetaculusBot/will-china-engage-in-a-fullscale-bl-6fc03e6f184c" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/MetaculusBot/will-china-engage-in-a-fullscale-bl-c270147e4db8" = ["YES", "YES", "NO", "NO"]
+"https://manifold.markets/MetaculusBot/will-china-engage-in-a-fullscale-bl" = ["YES", "YES", "YES", "NO"]
+
+[GROUPS."Hunter Biden Indicted"] # Federal 2023, other 2023, until 2024 election, other
+"https://manifold.markets/itsTomekK/american-politics-2023-hunter-biden" = ["YES", "NO", "NO", "NO"]
+"https://manifold.markets/AlexLiesman/will-hunter-biden-be-criminally-ind" = ["YES", "YES", "NO", "NO"]
+"https://manifold.markets/MetaculusBot/will-hunter-biden-be-indicted-befor-c928ea76a254" = ["YES", "YES", "YES", "NO"]
+"https://manifold.markets/dadonk/will-hunter-biden-be-indicted-befor" = ["YES", "YES", "YES", "NO"]
+
+[GROUPS."Donald Trump AI"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-54c1ac74bf18" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-8b69e020b537" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-97f90f7f76f7" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-27f1af542b81" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-3904a20e1f07" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-4bfbefd712fc" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio-cc96b831d0e3" = ["YES", "NO"]
+"https://manifold.markets/wtwen/will-donald-trump-propose-a-solutio"  = ["YES", "NO"]

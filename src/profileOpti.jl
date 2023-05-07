@@ -1,8 +1,9 @@
 using Pkg, Revise
 Pkg.activate("Bots")
 using Bots
-# includet("$(@__DIR__)/Arb.jl")
-includet("Bots/src/Arb.jl")
+# includet("$(@__DIR__)/Bots/src/Arb.jl")
+# includet("Bots/src/Arb.jl")
+includet("Arb.jl")
 
 function setup()
     groupNames = ["Nuclear Weapons Detonation 2023"]
@@ -82,7 +83,7 @@ GroupStatic((; name, slugs, y_matrix, n_matrix, not_na_matrix, noMarkets)) = Gro
 @profview arbitrageGroup(GroupStatic(first(groupData.groups)), botData, marketDataBySlug, arguments)
 
 group = first(groupData.groups)
-betAmounts = [14.742921088001445, -17.597491561818767, 0.0, 0.0, -17.30302644505758, -12.794756348500918, 0.0, 0.0, 1.0000000001389506]
+betAmounts = F[14.742921088001445, -17.597491561818767, 0.0, 0.0, -17.30302644505758, -12.794756348500918, 0.0, 0.0, 1.0000000001389506]
 bettableSlugsIndex = [i for (i, slug) in enumerate(group.slugs) if !marketDataBySlug[slug].isResolved]
 noShares = [marketDataBySlug[slug].shares[:NO] for slug in group.slugs]
 yesShares = [marketDataBySlug[slug].shares[:YES] for slug in group.slugs]
@@ -106,6 +107,14 @@ pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
 poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
 @descend fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
 # @descend minimum( fNoLimit!(betAmounts, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+
+profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
+x0 = repeat([zero(F)], length(bettableSlugsIndex))
+maxBetAmount = 1000.
+ub = F[marketDataBySlug[slug].probability > .98 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+lb = F[marketDataBySlug[slug].probability < .03 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+
+problem = Optimization.OptimizationProblem(profitF, x0, lb=lb, ub=ub)
 @descend solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.25)
 
 fClosure = (betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)
@@ -686,3 +695,213 @@ end
 @benchmark f6SimpleStatic!($(Float32.(betAmounts)), $(GroupStatic32(first(groupData.groups))), $(StructArray([MarketDataTest323(marketDataBySlug[slug].p, marketDataBySlug[slug].pool[:YES], marketDataBySlug[slug].pool[:NO]) for slug in group.slugs[bettableSlugsIndex]])), $bettableSlugsIndex, $sharesByEvent)
 
 @benchmark f6SimpleStatic!($(Float32.(betAmounts)), $(first(groupData.groups)), $(StructArray([MarketDataTest323(marketDataBySlug[slug].p, marketDataBySlug[slug].pool[:YES], marketDataBySlug[slug].pool[:NO]) for slug in group.slugs[bettableSlugsIndex]])), $bettableSlugsIndex, $sharesByEvent)
+
+using SIMD
+tmp = StructArray([MarketDataTest32(marketDataBySlug[slug].p, (marketDataBySlug[slug].pool[:YES], marketDataBySlug[slug].pool[:NO])) for slug in group.slugs[bettableSlugsIndex]], unwrap = T -> (T<:AbstractVector))
+
+function f6SIMD!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolNO, sharesByEvent, profitsByEvent)
+    profitsByEvent .= sharesByEvent
+
+    @inbounds @fastmath for i in LoopVecRange{8}(betAmount, unsafe=true)
+        y = poolYES[i]
+        n = poolNO[i]
+
+        p = pVec[i]
+
+        sharesYES = vifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
+
+        sharesNO = vifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
+
+        @inbounds @fastmath for j in eachindex(sharesByEvent) 
+            profitsByEvent[i] += y_matrix[j*size(y_matrix, 1) + i] * sharesYES
+            profitsByEvent[i] += n_matrix[j*size(y_matrix, 1) + i] * sharesNO
+        end
+    end
+
+    return profitsByEvent
+end
+
+f6SIMD!(Float32.(betAmounts[1:8]), vec(first(groupData.groups).y_matrix), vec(first(groupData.groups).n_matrix), first(groupData.groups).not_na_matrix, tmp.p, StructArrays.components(tmp.pool)..., SVector{8, Float32}(sharesByEvent), zero(sharesByEvent))
+@benchmark f6SIMD!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix), $(first(groupData.groups).n_matrix), $(first(groupData.groups).not_na_matrix), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)))
+
+@code_native syntax=:intel debuginfo=:none f6SIMD!(Float32.(betAmounts[1:8]), vec(first(groupData.groups).y_matrix), first(groupData.groups).n_matrix, first(groupData.groups).not_na_matrix, tmp.p, StructArrays.components(tmp.pool)..., sharesByEvent, zero(sharesByEvent))
+
+using LoopVectorization
+function f91!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolNO, sharesByEvent, profitsByEvent, sharesYES, sharesNO)
+    profitsByEvent .= sharesByEvent
+    sharesYES .= 0
+    sharesNO .= 0
+
+    fees = zero(eltype(profitsByEvent))
+
+    @turbo for i in eachindex(betAmount)
+        y = poolYES[i]
+        n = poolNO[i]
+
+        p = pVec[i]
+
+        sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
+        sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
+
+        for j in axes(n_matrix, 1)
+            profitsByEvent[j] += y_matrix[j, i] * sharesYES[i]
+            profitsByEvent[j] += n_matrix[j, i] * sharesNO[i]
+            profitsByEvent[j] -= not_na_matrix[j, i] * abs(betAmount[i])
+            # profitsByEvent[j] -= abs(betAmount[i])
+        end
+
+        fees += sum(abs(betAmount[i]) >= 1)
+    end
+
+    return @turbo minimum(profitsByEvent) - fees  * FEE
+end
+
+f91!(Float32.(betAmounts), first(groupData.groups).y_matrix[:, bettableSlugsIndex], first(groupData.groups).n_matrix[:, bettableSlugsIndex], first(groupData.groups).not_na_matrix[:, bettableSlugsIndex], tmp.p, StructArrays.components(tmp.pool)..., sharesByEvent, zero(sharesByEvent), zero(betAmounts), zero(betAmounts))
+@benchmark f91!($(Float32.(betAmounts)), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)), $(zero(betAmounts)), $(zero(betAmounts)))
+
+@benchmark f91!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix), $(first(groupData.groups).n_matrix), $(SparseMatrixCSC{Bool, Int32}(1 .- first(groupData.groups).not_na_matrix)), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)), $(zero(betAmounts)), $(zero(betAmounts)))
+@benchmark f91!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)), $(zero(betAmounts)), $(zero(betAmounts)))
+
+@benchmark f91!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix), $(first(groupData.groups).n_matrix), $(BitMatrix(first(groupData.groups).not_na_matrix)), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)), $(zero(betAmounts)), $(zero(betAmounts)))
+
+@benchmark f91!($(Float32.(betAmounts[1:8])), $(BitMatrix(first(groupData.groups).y_matrix)), $(BitMatrix(first(groupData.groups).n_matrix)), $(BitMatrix(first(groupData.groups).not_na_matrix)), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)), $(zero(betAmounts)), $(zero(betAmounts)))
+
+
+@code_native debuginfo=:none syntax=:intel f9!(Float32.(betAmounts), first(groupData.groups).y_matrix, first(groupData.groups).n_matrix, first(groupData.groups).not_na_matrix, tmp.p, StructArrays.components(tmp.pool)..., sharesByEvent, zero(sharesByEvent), zero(betAmounts), zero(betAmounts))
+
+function powTest(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolNO, sharesByEvent, profitsByEvent)
+    shares = zero(betAmount)
+    @turbo for i in eachindex(betAmount)
+        shares[i] = ifelse(betAmount[i] >= 1, poolYES[i] + betAmount[i] - poolYES[i] * (poolNO[i]/(poolNO[i] + betAmount[i]))^((1-pVec[i])/pVec[i]), 0)
+
+        for j in axes(y_matrix, 1)
+            profitsByEvent[j] += shares[i] # y_matrix[j, i] * shares[i]
+        end
+    end
+
+    return profitsByEvent
+end
+
+powTest(Float32.(betAmounts), first(groupData.groups).y_matrix, first(groupData.groups).n_matrix, first(groupData.groups).not_na_matrix, tmp.p, StructArrays.components(tmp.pool)..., SVector{8, Float32}(sharesByEvent), zero(sharesByEvent))
+@benchmark powTest($(Float32.(betAmounts)), $(first(groupData.groups).y_matrix), $(first(groupData.groups).n_matrix), $(first(groupData.groups).not_na_matrix), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(sharesByEvent)))
+@code_native debuginfo=:none syntax=:intel powTest(Float32.(betAmounts), first(groupData.groups).y_matrix, first(groupData.groups).n_matrix, first(groupData.groups).not_na_matrix, tmp.p, StructArrays.components(tmp.pool)..., SVector{8, Float32}(sharesByEvent), zero(sharesByEvent))
+
+using LoopVectorization
+function f92!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolNO, sharesByEvent, sharesYES, sharesNO)
+    sharesYES .= 0
+    sharesNO .= 0
+
+    fees = zero(eltype(sharesByEvent))
+
+    @turbo for i in eachindex(betAmount)
+        y = poolYES[i]
+        n = poolNO[i]
+
+        p = pVec[i]
+
+        sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
+        sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
+
+        fees += sum(abs(betAmount[i]) >= 1)
+    end
+
+    minProfits = F(Inf)
+
+    @turbo for j in axes(n_matrix, 1)
+        profit = sharesByEvent[j]
+
+        for i in axes(n_matrix, 2)
+            profit += y_matrix[j, i] * sharesYES[i]
+            profit += n_matrix[j, i] * sharesNO[i]
+            profit -= not_na_matrix[j, i] * abs(betAmount[i])
+        end
+
+        minProfits = min(minProfits, profit)
+    end
+
+    return minProfits - fees * F(FEE)
+end
+
+f92!(Float32.(betAmounts), first(groupData.groups).y_matrix[:, bettableSlugsIndex], first(groupData.groups).n_matrix[:, bettableSlugsIndex], first(groupData.groups).not_na_matrix[:, bettableSlugsIndex], tmp.p, StructArrays.components(tmp.pool)..., sharesByEvent, zero(betAmounts), zero(betAmounts))
+@benchmark f92!($(Float32.(betAmounts)), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(betAmounts)), $(zero(betAmounts)))
+@benchmark f92!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(betAmounts)), $(zero(betAmounts)))
+
+pVec = [marketDataBySlug[slug].p for slug in group.slugs[bettableSlugsIndex]]
+poolSOA = StructArray([marketDataBySlug[slug].pool for slug in group.slugs[bettableSlugsIndex]])
+
+function f93!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sharesByEvent, sharesNO, sharesYES)
+    sharesYES .= 0
+    sharesNO .= 0
+
+    fees = zero(eltype(sharesByEvent))
+
+    @turbo for i in eachindex(betAmount)
+        y = pool.YES[i]
+        n = pool.NO[i]
+
+        p = pVec[i]
+
+        sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
+        sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
+
+        fees += sum(abs(betAmount[i]) >= 1)
+    end
+
+    minProfits = F(Inf)
+
+    @turbo for j in axes(n_matrix, 1)
+        profit = sharesByEvent[j]
+
+        for i in axes(n_matrix, 2)
+            profit += y_matrix[j, i] * sharesYES[i]
+            profit += n_matrix[j, i] * sharesNO[i]
+            profit -= not_na_matrix[j, i] * abs(betAmount[i])
+        end
+
+        minProfits = min(minProfits, profit)
+    end
+
+    return minProfits - fees * F(FEE)
+end
+
+f93!(Float32.(betAmounts), first(groupData.groups).y_matrix[:, bettableSlugsIndex], first(groupData.groups).n_matrix[:, bettableSlugsIndex], first(groupData.groups).not_na_matrix[:, bettableSlugsIndex], pVec, poolSOA, sharesByEvent, zero(betAmounts), zero(betAmounts))
+@benchmark f93!($(Float32.(betAmounts)), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $pVec, $poolSOA, $sharesByEvent, $(zero(betAmounts)), $(zero(betAmounts)))
+@benchmark f93!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]), $pVec, $poolSOA, $sharesByEvent, $(zero(betAmounts)), $(zero(betAmounts)))
+
+
+@code_native debuginfo=:none syntax=:intel f93!(Float32.(betAmounts), first(groupData.groups).y_matrix[:, bettableSlugsIndex], first(groupData.groups).n_matrix[:, bettableSlugsIndex], first(groupData.groups).not_na_matrix[:, bettableSlugsIndex], pVec, poolSOA, sharesByEvent, zero(betAmounts), zero(betAmounts))
+
+function f9Test2!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolNO, sharesByEvent, sharesYES, sharesNO)
+    sharesYES .= 0
+    sharesNO .= 0
+
+    @turbo for i in eachindex(betAmount)
+        y = poolYES[i]
+        n = poolNO[i]
+
+        p = pVec[i]
+
+        sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
+        sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
+    end    
+
+    minProfits = F(Inf)
+
+    @turbo for j in axes(n_matrix, 2)
+        profit = sharesByEvent[j]
+
+        for i in axes(n_matrix, 1)
+            profit += y_matrix[i, j] * sharesYES[i]
+            profit += n_matrix[i, j] * sharesNO[i]
+            profit -= not_na_matrix[i, j] * abs(betAmount[i])
+        end
+
+        minProfits = min(minProfits, profit)
+    end
+
+    return minProfits
+end
+
+f9Test2!(Float32.(betAmounts), first(groupData.groups).y_matrix[:, bettableSlugsIndex]', first(groupData.groups).n_matrix[:, bettableSlugsIndex]', first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]', tmp.p, StructArrays.components(tmp.pool)..., sharesByEvent, zero(betAmounts), zero(betAmounts))
+@benchmark f9Test2!($(Float32.(betAmounts)), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]' |> collect), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]' |> collect), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]' |> collect), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(betAmounts)), $(zero(betAmounts)))
+@benchmark f9Test2!($(Float32.(betAmounts[1:8])), $(first(groupData.groups).y_matrix[:, bettableSlugsIndex]' |> collect), $(first(groupData.groups).n_matrix[:, bettableSlugsIndex]' |> collect), $(first(groupData.groups).not_na_matrix[:, bettableSlugsIndex]' |> collect), $tmp.p, $(StructArrays.components(tmp.pool)[1]), $(StructArrays.components(tmp.pool)[2]), $(sharesByEvent), $(zero(betAmounts)), $(zero(betAmounts)))
