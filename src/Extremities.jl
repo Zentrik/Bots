@@ -54,7 +54,7 @@ function execute!(botData, bet)
 end
 
 function updateShares!(marketData, newBet, BotData)
-    MarketData.shares[Symbol(newBet.outcome)] += newBet.shares
+    marketData.shares[Symbol(newBet.outcome)] += newBet.shares
 
     if marketData.shares[:YES] >= marketData.shares[:NO]
         marketData.shares[:YES] -= marketData.shares[:NO]
@@ -113,7 +113,7 @@ function setup(live, confirmBets)
     return marketById, botData, arguments, Set(reduce(vcat, values(SMARTUSERS))), Set(reduce(vcat, values(dumbUsers)))
 end
 
-pushJSON = JSON3.write(
+const pushJSON = JSON3.write(
 	Dict("topic"=> "realtime:live-bets-", 
 		"event"=>"phx_join", 
 		"payload"=>Dict(
@@ -132,13 +132,14 @@ isMarketClosed(market) = market.isResolved || market.closeTime / 1000 < time() #
 function production(; live=true, confirmBets=false)
     marketById, botData, arguments, smartUsers, dumbUsers = setup(live, confirmBets)
 
-    WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true) do socket
+    WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true, headers= ["User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"]) do socket
         try
             @info "Opened Socket"
             @debug socket
 
             # We could fetch contracts instead which saves us making a HTTP request but we really want the bettors id
-            send(socket, pushJSON)
+            # send(socket, pushJSON)
+            send(socket, pushJSONBets())
             @info "Sent Intialisation"
     
             Base.Experimental.@sync begin
@@ -159,6 +160,10 @@ function production(; live=true, confirmBets=false)
                     # FILTER out updates, only want inserts
 
                     bet = msgJSON.payload.data.record.data
+
+                    if .005 < bet.probAfter < .995
+                        continue
+                    end
 
                     # @debug msgJSON
                     @debug bet
@@ -283,7 +288,7 @@ function production(; live=true, confirmBets=false)
                         continue
                     end
 
-                    if time() * 1000 - market.createdTime < 1.12654*24*60*60*1000# created a day ago
+                    if time() * 1000 - market.createdTime < 1.12654*24*60*60*1000 && market.outcomeType != "STONK" # created a day ago
                         @debug "$marketId created $(time() - market.createdTime/1000)s ago"
                         continue
                     end
