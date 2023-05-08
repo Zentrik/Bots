@@ -3,7 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType
+import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType, shouldBreak
 
 Base.exit_on_sigint(false)
 
@@ -98,7 +98,7 @@ function execute(bet, currentProb, APIKEY)
 
         ohno = true
 
-        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && response.probBefore ≈ currentProb) "$currentProb"
+        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$currentProb"
     end
 
     return response, ohno
@@ -632,6 +632,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
             end
             rerun = :PostFailure
 
+            println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
+            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+            @info String(take!(buffer))
+
             return :PostFailure
         end
 
@@ -983,18 +987,6 @@ function test(groupNames = nothing; live=false, confirmBets=true, skip=false)
     production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
 end
 
-function shouldBreak(exception)
-    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch
-        return true
-    elseif exception isa TaskFailedException
-        return shouldBreak(exception.task.exception)
-    elseif exception isa CompositeException
-        return any(shouldBreak.(exception.exceptions))
-    else
-        return false
-    end
-end
-
 function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, skip=false)
     delay = 60
     lastRunTime = time()
@@ -1015,8 +1007,6 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
             end
 
             println(Dates.format(now(), "HH:MM:SS.sss"))
-
-            breakOnError(current_exceptions())
 
             if run == runs
                 break

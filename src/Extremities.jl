@@ -3,7 +3,7 @@ using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
-import ..Bots: @spawn_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType
+import ..Bots: @spawn_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType, shouldBreak
 
 Base.exit_on_sigint(false)
 
@@ -283,7 +283,7 @@ function production(; live=true, confirmBets=false)
                         continue
                     end
 
-                    if market.closeTime - time() * 1000 < 60*60*1000 + 6.234*60*1000 # closes in an hour
+                    if market.closeTime - time() * 1000 < 24*60*60*1000 + 6.234*60*1000 # closes in a day
                         @debug "$marketId closes in $(market.closeTime/1000 - time())s"
                         continue
                     end
@@ -392,17 +392,18 @@ function retryProd(runs=1; live=true, confirmBets=false)
         try
             production(; live=live, confirmBets=confirmBets)
         catch 
-            for error in current_exceptions()
-                display_error(error.exception, error.backtrace)
+            tmp = false
+            tmp = for (exception, _) in current_exceptions()
+                if shouldBreak(exception)
+                    return true
+                end
+            end
+
+            if tmp == true
+                break
             end
 
             println(Dates.format(now(), "HH:MM:SS.sss"))
-
-            for error in current_exceptions()
-                if error.exception isa MethodError || error.exception isa InterruptException
-                    break
-                end
-            end
 
             if run == runs
                 break

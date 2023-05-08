@@ -108,6 +108,18 @@ Base.setindex!(x::MutableOutcomeType{T}, y, s::Symbol) where T = setfield!(x, s,
 Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType{T}) where {T<:Number} = x
 Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType) where {T<:Number} = MutableOutcomeType{T}(x.YES, x.NO)
 
+function shouldBreak(exception)
+    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch
+        return true
+    elseif exception isa TaskFailedException
+        return shouldBreak(exception.task.exception)
+    elseif exception isa CompositeException
+        return any(shouldBreak.(exception.exceptions))
+    else
+        return false
+    end
+end
+
 module ArbBot
 include("Arb.jl")
 end

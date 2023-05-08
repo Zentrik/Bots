@@ -9,12 +9,6 @@ SUPABASE_APIKEY= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 APIKEY = "c7d5892e-6277-43d9-99fa-6c36b40d3f50"
 USERNAME = "BottieMcBotface"
 
-[GROUPS."Isaac Trustworthiness"] # in Jan, not in Jan, none
-"https://manifold.markets/jack/will-isaacking-lose-his-trustworthy" = ["YES", "NO", "NO"]
-"https://manifold.markets/Courtney/isaacking-and-destiny-together-mani-42332c90e971" = ["YES", "NO", "NO"]
-"https://manifold.markets/jack/will-isaacking-lose-his-trustworthy-ec06dc536f2c" = ["YES", "ZERO", "NO"]
-"https://manifold.markets/IsaacKing/will-i-lose-my-trustworthy-ish-badg" = ["YES", "ZERO", "NO"]
-
 [GROUPS."Destiny Trustworthiness"]
 "https://manifold.markets/Yev/will-destiny-be-trustworthyish-by-e" = ["YES", "NO"]
 "https://manifold.markets/SirCryptomind/will-destiny-get-their-trustworthyi" = ["YES", "NO"]
@@ -187,12 +181,6 @@ USERNAME = "BottieMcBotface"
 [GROUPS."Sam Sentence Length"] # [1, 4], >4, none
 "https://manifold.markets/GeorgeVii/does-sam-trabucco-get-1-year-senten" = ["YES", "YES", "NO"]
 "https://manifold.markets/GeorgeVii/does-sam-trabucco-get-4-years-sente" = ["NO", "YES", "NO"]
-
-[GROUPS."SBF in Jail"]
-"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-j" = ["YES", "NO", "NO", "NO", "NO"]
-"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-f" = ["YES", "YES", "NO", "NO", "NO"]
-"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-m" = ["YES", "YES", "YES", "NO", "NO"]
-"https://manifold.markets/GeneFama/will-sbf-be-physically-in-jail-on-a" = ["YES", "YES", "YES", "YES", "NO"]
 
 [GROUPS."SBF Jail Time"]
 "https://manifold.markets/Gigacasting/will-sbf-spend-at-least-one-year-in" = ["YES", "NO", "NO", "NO"]
