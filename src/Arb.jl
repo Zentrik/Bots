@@ -356,6 +356,28 @@ function updateMarketData!(marketData, market)
     marketData.lastBetTime = market.lastBetTime
 end
 
+function updateLimitOrders!(marketData)
+    for (i, limitProb) in enumerate(marketData.sortedLimitProbs.YES) # limit orders buying no
+        if limitProb + 1e-4 < marketData.probability
+            @debug "Deleted limit order buying NO at $limitProb as market probability is now $(marketData.probability)"
+            deleteat!(marketData.sortedLimitProbs.YES, i)
+            delete!(marketData.limitOrders.YES, limitProb)
+            @debug marketData.sortedLimitProbs
+            @debug marketData.limitOrders
+        end
+    end
+
+    for (i, limitProb) in enumerate(marketData.sortedLimitProbs.NO) # limit orders buying yes
+        if limitProb - 1e-4 > marketData.probability
+            @debug "Deleted limit order buying YES at $limitProb as market probability is now $(marketData.probability)"
+            deleteat!(marketData.sortedLimitProbs.NO, i)
+            delete!(marketData.limitOrders.NO, limitProb)
+            @debug marketData.sortedLimitProbs
+            @debug marketData.limitOrders
+        end
+    end
+end
+
 function getMarkets!(marketDataBySlug, slugs, Supabase_APIKEY)
     @sync for paritionedSlugs in Iterators.partition(slugs, 20) # 2000 is max characters in uri, so we have about 1900 for slugs, max slug is about 50 : 1900/50 is 38. generous magin to 20
         @async_showerr begin
@@ -451,6 +473,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
     @debug group.not_na_matrix
     @debug map(slug -> marketDataBySlug[slug].shares.YES, group.slugs)
     @debug map(slug -> marketDataBySlug[slug].shares.NO, group.slugs)
+    @debug oldNoShares
+    @debug oldYesShares
+    @debug newYesShares
+    @debug newNoShares
     @debug yesShares
     @debug noShares
     @debug group.y_matrix * yesShares
@@ -471,6 +497,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         elseif abs(amount) >= 1.
             outcome = amount > 0. ? "YES" : "NO"
             shares = newYesShares[j] + newNoShares[j]
+            @smart_assert_showerr isapprox(newYesShares[j], 0, atol=1e-2) || isapprox(newNoShares[j], 0, atol=1e-2) "$j"
             redeemedMana = 0.
             if outcome == "YES"
                 redeemedMana = min(marketDataBySlug[slug].shares.NO, shares)
@@ -621,8 +648,14 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
                 end
             end
         catch err
-            for timer in timers
-                close(timer)
+            println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
+            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+            @info String(take!(buffer))
+
+            for i in eachindex(timers)
+                if isdefined(timers, i)
+                    close(timers[i])
+                end
             end
             for e in err
                 @debug e
@@ -631,10 +664,6 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
                 end
             end
             rerun = :PostFailure
-
-            println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
-            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
-            @info String(take!(buffer))
 
             return :PostFailure
         end
@@ -793,7 +822,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
     
             Base.Experimental.@sync begin # So that we exit on error straight away and close socket
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
-                currentTask = @async_showerr if !skip
+                currentTask = @async_showerr if !skip && !errorOccurred
+                    sleep(5) # idk might work to fix bets not coming through on first run
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
                     for group in groupData.groups       
                         if errorOccurred
@@ -846,6 +876,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 return nothing
                             end
                             updateMarketData!(marketDataBySlug[slug], market)
+                            updateLimitOrders!(marketDataBySlug[slug]) # need to delete any limit orders that we know have been filled
 
                             # Should probably only do this if market data actually changed
                             # probability won't change if we are hitting a limit order
@@ -856,8 +887,9 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                             # Big problem if we receive bets delayed, if bet delayed by 10s just kill program
                             # Problem, when a bet is made we receive ~3 messages and the first couple may not have updated lastBetTime
-                            if market.lastBetTime < (time() - 10) * 10^3 
-                                @debug "10s old bet $(market.lastBetTime), $(time()) for $slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                            tmpTime = time()
+                            if market.lastBetTime < (tmpTime - 10) * 10^3 
+                                @debug "10s old bet $(market.lastBetTime), $tmpTime for $slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
                                 return nothing
                                 # throw(ErrorException("Got very old bet on $slug, $market at $(time())"))
                             end
@@ -993,8 +1025,12 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
 
     for run in 1:runs
         try
+            println(Dates.format(now(), "HH:MM:SS.sss"))
+
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch
+            println(Dates.format(now(), "HH:MM:SS.sss"))
+
             tmp = false
             tmp = for (exception, _) in current_exceptions()
                 if shouldBreak(exception)
@@ -1005,8 +1041,6 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
             if tmp == true
                 break
             end
-
-            println(Dates.format(now(), "HH:MM:SS.sss"))
 
             if run == runs
                 break
