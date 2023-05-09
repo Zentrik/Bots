@@ -574,6 +574,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
         timers = Vector{Timer}(undef, length(plannedBets))
 
+        for (i, slug) in enumerate(group.slugs)
+            marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
+        end
+
         if any(oldProb .!= [marketDataBySlug[slug].probability for slug in group.slugs])
             @info "Market moved after optimisation"
             return :UnexpectedBet
@@ -675,11 +679,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
 
         println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
         println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
-        @info String(take!(buffer))
 
-        for (i, slug) in enumerate(group.slugs)
-            marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
-        end
+        # Doesn't account for redemptions
+        # println(buffer, "Actual Profits:         $(minimum(group.y_matrix * [marketDataBySlug[slug].shares.YES for slug in group.slugs] + group.n_matrix * [marketDataBySlug[slug].shares.NO for slug in group.slugs] - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+        @info String(take!(buffer))
 
         return rerun
     else
@@ -774,14 +777,14 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
-function runGroup(group, groupData, botData, marketDataBySlug, arguments)
+function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskValue=nothing)
     delay = 60
     runs = 0
     rerun = :FirstRun
 
     numberOfPostFailures = 0
 
-    while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 3) || rerun == :PostFailure
+    while rerun == :FirstRun || (rerun == :BetMore && runs ≤ 5) || (rerun == :UnexpectedBet && runs ≤ 1) || rerun == :PostFailure
         if rerun == :PostFailure
             numberOfPostFailures += 1
             if numberOfPostFailures >= 2
@@ -798,10 +801,22 @@ function runGroup(group, groupData, botData, marketDataBySlug, arguments)
             getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
         end
 
+        if rerun == :UnexpectedBet
+            sleep(2)
+        end
+
         @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
         @debug [marketDataBySlug[slug].p for slug in group.slugs]
         @debug [marketDataBySlug[slug].pool for slug in group.slugs]
         runs += 1
+
+        if !isnothing(taskValue)
+            # no need to run any previously queued requests.
+            if taskValue.runAgain
+                taskValue = (runAgain = false, task=current_task())
+            end
+        end
+
         rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
         @debug rerun
     end
@@ -941,12 +956,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 group = groupData.groups[groupIndex]
 
                                 @debug "current prob $(marketDataBySlug[slug].probability)"
-                                runGroup(group, groupData, botData, marketDataBySlug, arguments)
-
-                                # no need to run any previously queued requests.
-                                if TaskDict[groupIndex].runAgain
-                                    TaskDict[groupIndex] = (runAgain = false, task=current_task())
-                                end
+                                runGroup(group, groupData, botData, marketDataBySlug, arguments, TaskDict[groupIndex])
             
                                 @debug "Removing limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                                 for slug in group.slugs
