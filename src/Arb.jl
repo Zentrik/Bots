@@ -574,6 +574,11 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         oldProbBySlug = Dict(group.slugs[j] => oldProb[j] for j in bettableSlugsIndex)
         timers = Vector{Timer}(undef, length(plannedBets))
 
+        if any(oldProb .!= [marketDataBySlug[slug].probability for slug in group.slugs])
+            @info "Market moved after optimisation"
+            return :UnexpectedBet
+        end
+
         try 
             # need to add check to see if we're actually receiving messages
             @sync for (i, bet) in enumerate(plannedBets) 
