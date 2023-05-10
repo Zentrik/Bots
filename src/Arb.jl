@@ -444,6 +444,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
     if allMarketsClosing
         printstyled("$(group.name) all markets closed at $(Dates.format(now(), "HH:MM:SS.sss"))\n", bold=true, underline=true)
 
+        for slug in group.slugs # So we don't rerun these markets
+            marketDataBySlug[slug].lastOptimisedProb = marketDataBySlug[slug].probability # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
+        end
+
         rerun = :Success
         return rerun
     end
@@ -533,7 +537,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         for (i, slug) in enumerate(group.slugs)
             marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
         end
-        
+
         rerun = :Success
         return rerun
     end
@@ -591,7 +595,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         end
 
         movedMarkets = 0
-        tasks = Vector{Task}(undef, length(plannedBets))
+        skip = false
 
         if any(oldProb .!= [marketDataBySlug[slug].probability for slug in group.slugs])
             @info "Market moved after optimisation"
@@ -602,7 +606,20 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
             # need to add check to see if we're actually receiving messages
             @sync for (i, bet) in enumerate(plannedBets) 
                 @async_showerr begin
+                    if skip 
+                        return nothing
+                    end
+
                     slug = urlToSlug(bet.url)
+
+                    if oldProbBySlug[slug] != marketDataBySlug[slug].probability
+                        movedMarkets += 1
+                        rerun = :UnexpectedBet
+                        @info "$slug moved from $(oldProbBySlug[slug]) to $(marketDataBySlug[slug].probability)"
+                        skip = true
+                        
+                        return nothing
+                    end
 
                     # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
                     executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
@@ -675,7 +692,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
 
-                sleep(0.1) # so manifold processes requests in desired order
+                sleep(0.2) # so manifold processes requests in desired order. doesn't seem to help much with a 100ms sleep
             end
         catch err
             println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
