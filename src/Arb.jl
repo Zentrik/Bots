@@ -2,6 +2,8 @@ using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics
 using HTTP, JSON3, Dates, OpenSSL
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
+using TimeZones
+import TimeZones: unix2zdt
 
 import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until, MutableOutcomeType, shouldBreak
 
@@ -50,7 +52,7 @@ end
 
     hasUpdated::typeof(Condition()) = Condition()
     lastOptimisedProb::F = -1
-    lastBetTime::Int = 0
+    lastContractUpdateTimeUTC::ZonedDateTime = ZonedDateTime(0, tz"UTC")
 end
 
 @with_kw mutable struct BotData @deftype String
@@ -85,7 +87,7 @@ struct PlannedBet
 end
 
 function execute(bet, currentProb, APIKEY)
-    ohno = false
+    ohno = :Success
     response = createBet(APIKEY, bet.id, bet.amount, bet.outcome)
     # need to check if returned info matches what we wanted to bet, i.e. if we got less shares than we wanted to. If we got more ig either moved or smth weird with limit orders.
 
@@ -96,9 +98,13 @@ function execute(bet, currentProb, APIKEY)
         @error response
         @error response.fills
 
-        ohno = true
+        ohno = :LimitOrder
 
         @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$currentProb"
+    end
+
+    if !isapprox(response.probBefore, currentProb, atol=1e-4)
+        ohno = :MarketMoved
     end
 
     return response, ohno
@@ -185,7 +191,7 @@ function fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sha
     sharesYES .= 0
     sharesNO .= 0
 
-    fees = zero(eltype(sharesByEvent))
+    betCount = zero(eltype(sharesByEvent))
 
     @turbo for i in eachindex(betAmount)
         y = pool.YES[i]
@@ -196,7 +202,7 @@ function fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sha
         sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
         sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
 
-        fees += sum(abs(betAmount[i]) >= 1)
+        betCount += abs(betAmount[i]) >= 1
     end
 
     minProfits = F(Inf)
@@ -213,7 +219,7 @@ function fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sha
         minProfits = min(minProfits, profit)
     end
 
-    return -(minProfits - fees * F(FEE))
+    return -(minProfits - betCount^2/2 * F(FEE))
 end
 
 mutable struct pStruct
@@ -275,8 +281,8 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     end
 
     @debug "Running adaptive for $(group.name)"
-    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.09)
-    # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
+    # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.09)
+    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
 
     @debug "Yielding after adaptive, $(group.name)"
     yield()
@@ -331,7 +337,7 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     return bestSolution
 end
 
-function updateMarketData!(marketData, market)
+function updateMarketData!(marketData, market, fs_updated_time)
     # marketData.probability = market.prob  # this updates slowly?
 
     marketData.p = market.p # can change if a subsidy is given
@@ -348,12 +354,14 @@ function updateMarketData!(marketData, market)
     marketData.isResolved = market.isResolved
     marketData.closeTime = market.closeTime
 
-    @debug "Updating market lastBetTime from $(marketData.lastBetTime) to $(market.lastBetTime), slug: $(market.slug)"
-    if market.lastBetTime < marketData.lastBetTime
-        throw(ErrorException("Updated with old market data?, $(marketData.lastBetTime), $(market.lastBetTime), $marketData, $market"))
+    marketLastUpdateUTC = ZonedDateTime(DateTime(fs_updated_time, dateformat"yyyy-mm-ddTHH:MM:SS.sss"), tz"UTC")
+
+    @debug "Updating market lastContractUpdateTimeUTC from $(marketData.lastContractUpdateTimeUTC) to $marketLastUpdateUTC, slug: $(market.slug)"
+    if marketLastUpdateUTC < marketData.lastContractUpdateTimeUTC
+        throw(ErrorException("Updated with old market data?, $(marketData.lastContractUpdateTimeUTC), $marketLastUpdateUTC, $marketData, $market, $fs_updated_time"))
     end
 
-    marketData.lastBetTime = market.lastBetTime
+    marketData.lastContractUpdateTimeUTC = marketLastUpdateUTC
 end
 
 function updateLimitOrders!(marketData)
@@ -387,7 +395,7 @@ function getMarkets!(marketDataBySlug, slugs, Supabase_APIKEY)
             responseJSON = JSON3.read(response.body)
     
             for contract in responseJSON
-                updateMarketData!(marketDataBySlug[contract.slug], contract.data)
+                updateMarketData!(marketDataBySlug[contract.slug], contract.data, contract.fs_updated_time)
             end
         end
     end
@@ -407,7 +415,7 @@ function getMarketsUsingId!(marketDataBySlug, slugs) # If we use slugs the reque
     responseJSON = JSON3.read(response.body)
 
     for contract in responseJSON
-        updateMarketData!(marketDataBySlug[contract.slug], contract.data)
+        updateMarketData!(marketDataBySlug[contract.slug], contract.data, contract.fs_updated_time)
     end
 end
 
@@ -416,7 +424,7 @@ getSlugs(groups::Vector{Group}) = mapreduce(group -> group.slugs, vcat, groups)
 
 isMarketClosingSoon(market) = market.isResolved || market.closeTime / 1000 < time() + 60 # if resolved or closing in 60 seconds
 
-function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
+function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugToBet=nothing)::Symbol
     rerun = :Success
 
     for slug in group.slugs
@@ -518,10 +526,14 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         end
     end
 
-    sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
+    sort!(plannedBets, by = bet -> bet.redeemedMana + (!isnothing(firstSlugToBet) ? (bet.id == marketDataBySlug[firstSlugToBet].id ? 250 : 0) : 0), rev=true)
 
     # we never return a profit less than 0 so we're not going to redeem bets that have profit less than 0.
     if (profit ≤ 0) && !((profit + FEE * length(plannedBets) ≥ 0) && (sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.))
+        for (i, slug) in enumerate(group.slugs)
+            marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
+        end
+        
         rerun = :Success
         return rerun
     end
@@ -578,6 +590,9 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
             marketDataBySlug[slug].lastOptimisedProb = newProb[i] # not great if we have insufficient balance as later we might have sufficient but think the market is already optimised
         end
 
+        movedMarkets = 0
+        tasks = Vector{Task}(undef, length(plannedBets))
+
         if any(oldProb .!= [marketDataBySlug[slug].probability for slug in group.slugs])
             @info "Market moved after optimisation"
             return :UnexpectedBet
@@ -594,14 +609,18 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
 
                     botData.balance -= executedBet.amount
 
-                    if ohno
-                        rerun = :UnexpectedBet
-
+                    if ohno != :Success
                         if executedBet.outcome == "YES"
                             yesShares[group.slugs .== slug] .= oldYesShares[group.slugs .== slug] .+ executedBet.shares
                         elseif executedBet.outcome == "NO"
                             noShares[group.slugs .== slug] .= oldNoShares[group.slugs .== slug] .+ executedBet.shares
                         end
+
+                        rerun = :UnexpectedBet
+                    end
+
+                    if ohno == :MarketMoved
+                        movedMarkets += 1
                     end
 
                     updateShares!(marketDataBySlug[slug], executedBet, botData)
@@ -642,11 +661,11 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
                     # Don't place @debug on wait_until otherwise error is not thrown.
                     timers[i] = Timer(60) do _
-                        notify(marketDataBySlug[slug].hasUpdated, "Wait timed out waiting for new bet, $(executedBet.createdTime), $(marketDataBySlug[slug].lastBetTime) on $slug", error=true)
+                        notify(marketDataBySlug[slug].hasUpdated, "Wait timed out waiting for new bet, UTC: $(unix2zdt(executedBet.createdTime/10^3)), $(marketDataBySlug[slug].lastContractUpdateTimeUTC) on $slug", error=true)
                     end
                     try
-                        while marketDataBySlug[slug].lastBetTime < executedBet.createdTime
-                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting for new bet, $(executedBet.createdTime), $(marketDataBySlug[slug].lastBetTime)"
+                        while marketDataBySlug[slug].lastContractUpdateTimeUTC < unix2zdt(executedBet.createdTime/10^3)
+                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting for new bet, UTC: $(unix2zdt(executedBet.createdTime/10^3)), $(marketDataBySlug[slug].lastContractUpdateTimeUTC)"
                             wait(marketDataBySlug[slug].hasUpdated)
                         end
                     finally
@@ -655,6 +674,8 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
 
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
+
+                sleep(0.1) # so manifold processes requests in desired order
             end
         catch err
             println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
@@ -666,9 +687,16 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
                     close(timers[i])
                 end
             end
-            for e in err
-                @debug e
-                if startswith(e.task.exception, "Wait timed out waiting for new bet")
+            if err isa CompositeException
+                for e in err
+                    @debug e
+                    if startswith(e.task.exception, "Wait timed out waiting for new bet")
+                        rethrow()
+                    end
+                end
+            else
+                @debug err
+                if startswith(err.task.exception, "Wait timed out waiting for new bet")
                     rethrow()
                 end
             end
@@ -684,6 +712,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments)::Symbol
         # println(buffer, "Actual Profits:         $(minimum(group.y_matrix * [marketDataBySlug[slug].shares.YES for slug in group.slugs] + group.n_matrix * [marketDataBySlug[slug].shares.NO for slug in group.slugs] - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
         @info String(take!(buffer))
 
+        if movedMarkets >= 2
+            @debug "Sleeping for two seconds as $movedMarkets markets moved"
+            sleep(2)
+        end
         return rerun
     else
         println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
@@ -777,7 +809,7 @@ function setup(groupNames, live, confirmBets)
     return groupData, botData, marketDataBySlug, arguments
 end
 
-function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskValue=nothing)
+function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskValue=nothing, slug=nothing)
     delay = 60
     runs = 0
     rerun = :FirstRun
@@ -801,10 +833,6 @@ function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskVa
             getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
         end
 
-        if rerun == :UnexpectedBet
-            sleep(2)
-        end
-
         @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
         @debug [marketDataBySlug[slug].p for slug in group.slugs]
         @debug [marketDataBySlug[slug].pool for slug in group.slugs]
@@ -817,7 +845,7 @@ function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskVa
             end
         end
 
-        rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments)
+        rerun = arbitrageGroup(group, botData, marketDataBySlug, arguments, slug)
         @debug rerun
     end
 end
@@ -831,6 +859,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
     # currentTask = @async nothing
 
     errorOccurred = false
+
     WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true, headers=["User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"]) do socket
         try
             @info "Opened Socket"
@@ -877,39 +906,41 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         market = msgJSON.payload.data.record.data
                         marketId = market.id
                         # @debug market.slug
-                    
+
                         if marketId in groupData.contractIdSet 
                             @smart_assert_showerr market.mechanism == "cpmm-1"
 
                             slug = groupData.contractIdToSlug[marketId] #market.slug also works
                             oldProb = marketDataBySlug[slug].probability
 
-                            # println("Received message: $(market.lastBetTime)")
+                            marketLastUpdateUTC = ZonedDateTime(DateTime(msgJSON.payload.data.record.fs_updated_time, dateformat"yyyy-mm-ddTHH:MM:SS.sss"), tz"UTC")
+                            marketLastUpdateLocal = astimezone(marketLastUpdateUTC, localzone())
+
+                            # println("Received message: $(marketLastUpdate)")
                             # @warn slug
                             # if marketDataBySlug[slug].probability ≉ oldProb
-                                @debug "Received message $slug at $(poolToProb(market.p, market.pool)) with lastBetTime $(market.lastBetTime) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                                @debug "Received message $slug at $(poolToProb(market.p, market.pool)) with lastContractUpdateTimeBritish $(marketLastUpdateLocal) at $(now())"
                             # end
                             # @warn "from prob $(market.prob)"
 
-                            if market.lastBetTime < marketDataBySlug[slug].lastBetTime
-                                @debug "Old bet? $(market.lastBetTime), $(marketDataBySlug[slug].lastBetTime) for $slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                            if marketLastUpdateUTC < marketDataBySlug[slug].lastContractUpdateTimeUTC
+                                @debug "Old bet? $marketLastUpdateLocal, $(astimezone(marketDataBySlug[slug].lastContractUpdateTimeUTC, localzone())) for $slug at $(marketDataBySlug[slug].probability) at $(now())"
                                 return nothing
                             end
-                            updateMarketData!(marketDataBySlug[slug], market)
+                            updateMarketData!(marketDataBySlug[slug], market, msgJSON.payload.data.record.fs_updated_time)
                             updateLimitOrders!(marketDataBySlug[slug]) # need to delete any limit orders that we know have been filled
 
                             # Should probably only do this if market data actually changed
                             # probability won't change if we are hitting a limit order
 
                             # We do this before checking if bet is 10s old, so that we can stop waiting on bet information to come through after betting
-                            @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Notified $slug at $(marketDataBySlug[slug].probability) with $(market.lastBetTime)"
+                            @debug "$(now()) Notified $slug at $(marketDataBySlug[slug].probability) with $(marketLastUpdateLocal)"
                             notify(marketDataBySlug[slug].hasUpdated)
 
                             # Big problem if we receive bets delayed, if bet delayed by 10s just kill program
                             # Problem, when a bet is made we receive ~3 messages and the first couple may not have updated lastBetTime
-                            tmpTime = time()
-                            if market.lastBetTime < (tmpTime - 10) * 10^3 
-                                @debug "10s old bet $(market.lastBetTime), $tmpTime for $slug at $(marketDataBySlug[slug].probability) at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                            if marketLastUpdateLocal < now(localzone()) - Second(6)
+                                @debug "6s old bet $(marketLastUpdateLocal), $(now()), $(now(localzone())), $(now(localzone()) - Second(6)) for $slug at $(marketDataBySlug[slug].probability)"
                                 return nothing
                                 # throw(ErrorException("Got very old bet on $slug, $market at $(time())"))
                             end
@@ -956,7 +987,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                                 group = groupData.groups[groupIndex]
 
                                 @debug "current prob $(marketDataBySlug[slug].probability)"
-                                runGroup(group, groupData, botData, marketDataBySlug, arguments, TaskDict[groupIndex])
+                                runGroup(group, groupData, botData, marketDataBySlug, arguments, TaskDict[groupIndex], slug)
             
                                 @debug "Removing limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                                 for slug in group.slugs
@@ -985,7 +1016,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             rethrow()
                         end
                         # printstyled("Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
-                        @debug "Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                        # @debug "Sleeping at $(Dates.format(now(), "HH:MM:SS.sss"))"
                         sleep(30)
                     end
                 end

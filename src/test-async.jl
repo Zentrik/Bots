@@ -424,3 +424,18 @@ function testAsyncBreak()
         end
     end
 end
+
+function testOrdering()
+    task = @task println(1)
+    task2 = @task begin
+        sleep(5)
+        println(2)
+    end
+
+    schedule(task2)
+    sleep(0.001)
+    schedule(task)
+
+    wait(task)
+    wait(task2)
+end
