@@ -281,8 +281,8 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     end
 
     @debug "Running adaptive for $(group.name)"
-    # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.09)
-    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
+    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.09)
+    # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
 
     @debug "Yielding after adaptive, $(group.name)"
     yield()
