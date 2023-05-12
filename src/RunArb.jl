@@ -4,7 +4,14 @@ using Revise, Bots # need to dev Bots, so don't activate Bots env. Also revise n
 
 using Logging, LoggingExtras, Dates
 
-not_Bots_message_filter(log) = log._module === Bots || parentmodule(log._module) == Bots || log._module === Main
+function not_Bots_message_filter(log)  
+    if (@isdefined Bots)
+        return log._module === Bots || parentmodule(log._module) == Bots || log._module === Main
+    else
+        return log._module === Main
+    end
+end
+
 timestamp_logger(logger) = TransformerLogger(logger) do log
     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
 end
