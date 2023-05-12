@@ -2,8 +2,8 @@ using Pkg, Revise
 Pkg.activate("Bots")
 using Bots
 # includet("$(@__DIR__)/Bots/src/Arb.jl")
-# includet("Bots/src/Arb.jl")
-includet("Arb.jl")
+includet("Bots/src/Arb.jl")
+# includet("Arb.jl")
 
 function setup()
     groupNames = ["Nuclear Weapons Detonation 2023"]

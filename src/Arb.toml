@@ -116,9 +116,9 @@ USERNAME = "BottieMcBotface"
 # "https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["NO", "YES", "NO", "YES", "NO"]
 # "https://manifold.markets/Bot/will-elon-musk-be-forced-out-as-tes" = ["NO", "NO", "YES", "YES", "NO"]
 
-# [GROUPS."Tesla CEO"]
-# "https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "YES"]
-# "https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "NO"]
+[GROUPS."Tesla CEO"]
+"https://manifold.markets/kolotom99/will-elon-musk-be-teslas-ceo-throug" = ["NO", "YES"]
+"https://manifold.markets/ManifoldMarkets/will-elon-musk-step-down-from-being" = ["YES", "NO"]
 # "https://manifold.markets/BTE/will-elon-musk-appoint-a-replacemen" = ["YES", "NO"]
 
 [GROUPS."Musk Richest Man"]
@@ -264,6 +264,7 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/AlexKirigiya/will-elon-step-down-as-head-of-twit-2e167c2d6adb" = ["YES", "NO", "NO"]
 "https://manifold.markets/itsTomekK/2023-will-elon-musk-quit-one-of-his" = ["YES", "YES", "NO"]
 "https://manifold.markets/kolotom99/will-elon-musk-be-twitters-ceo-thro" = ["NO", "YES", "YES"]
+"https://manifold.markets/helloman/will-elon-musk-be-ceo-of-twitter-by" = ["NO", "YES", "YES"]
 
 [GROUPS."Nuclear Weapons"]
 "https://manifold.markets/AmmonLam/will-a-nuclear-weapon-cause-over-10" = ["YES", "YES", "YES", "NO"]
@@ -294,9 +295,11 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/itsTomekK/international-affairs-2023-turkey-a" = ["YES", "NO"]
 
 [GROUPS."Trump Twitter"]
-"https://manifold.markets/kolotom99/will-realdonaldtrump-tweet-in-2023" = ["YES", "NO"]
-"https://manifold.markets/ACXBot/21-will-donald-trump-make-at-least" = ["YES", "NO"]
-# "https://manifold.markets/CP/will-donald-trump-tweet-once-in-202" = ["YES", "NO"]
+"https://manifold.markets/kolotom99/will-realdonaldtrump-tweet-in-2023" = ["YES", "NO", "NO"]
+"https://manifold.markets/ACXBot/21-will-donald-trump-make-at-least" = ["YES", "NO", "NO"]
+"https://manifold.markets/metabro/donald-trumps-return-on-twitter-wil-27dcf6a68db5" = ["YES", "NO", "NO"]
+# "https://manifold.markets/CP/will-donald-trump-tweet-once-in-202" = ["YES", "NO", "NO"]
+"https://manifold.markets/Gigacasting/will-trump-tweet-by-nov-2024" = ["YES", "YES", "NO"]
 
 [GROUPS."General Election 2023"]
 "https://manifold.markets/yaboi69/will-labour-win-a-uk-general-electi" = ["YES", "NO", "NO"]
@@ -414,9 +417,11 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/Butidigress/will-destiny-livestream-on-cozytv-b" = ["YES", "NO", "NO"]
 "https://manifold.markets/Butidigress/will-destiny-livestream-on-cozytv-i" = ["YES", "YES", "NO"]
 
-[GROUPS."Eurovision"]
-"https://manifold.markets/Yoav/will-ukraine-win-eurovision-2023" = ["YES", "NO"]
-"https://manifold.markets/DFWolves/will-ukraine-win-eurovision-2023-1f38d46a2d38" = ["YES", "NO"]
+[GROUPS."Eurovision"] # Ukraine, Sweden
+"https://manifold.markets/Yoav/will-ukraine-win-eurovision-2023" = ["YES", "NO", "NO"]
+"https://manifold.markets/DFWolves/will-ukraine-win-eurovision-2023-1f38d46a2d38" = ["YES", "NO", "NO"]
+"https://manifold.markets/MetaculusBot/will-swedens-loreen-win-the-eurovis" = ["NO", "YES", "NO"]
+"https://manifold.markets/xyz/will-sweden-win-eurovision-2023" = ["NO", "YES", "NO"]
 
 [GROUPS."Lex Fridman Make Market"]
 "https://manifold.markets/BTE/will-lex-fridman-create-a-market-on-c9e0364dbec9" = ["YES", "NO"]
@@ -553,3 +558,22 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/itsTomekK/american-politics-2023-dianne-feins" = ["NO", "NO", "NO", "YES"]
 "https://manifold.markets/ScottLawrence/will-dianne-feinstein-be-a-member-o" = ["NO", "NO", "NO", "YES"]
 # "https://manifold.markets/MetaculusBot/will-dianne-feinstein-resign-from-t" = ["YES", "YES", "NO"]
+
+[GROUPS."Golden state warriors"]
+"https://manifold.markets/KevinBurke/will-the-golden-state-warriors-win-dc781627ac1f" = ["YES", "NO"]
+"https://manifold.markets/RJPerez/will-the-6-golden-state-warriors-wi-719e5594a79f" = ["YES", "NO"]
+
+[GROUPS."Lakers"]
+"https://manifold.markets/prognostic8r/will-the-los-angeles-lakers-win-the" = ["YES", "NO"]
+"https://manifold.markets/MetaculusBot/which-team-will-win-the-202223-nba-0ff32dfbe823" = ["YES", "NO"]
+
+[GROUPS."Liverpool"]
+"https://manifold.markets/getby/will-liverpool-be-in-the-champions" = ["YES", "NO"]
+"https://manifold.markets/MattReardon/will-liverpool-fc-qualify-for-the-2" = ["YES", "NO"]
+
+[GROUPS."Premier League"]
+"https://manifold.markets/ChristianLarsen/will-arsenal-win-this-2223-season-p" = ["YES", "NO"]
+"https://manifold.markets/AlexL/will-arsenal-win-the-premier-league" = ["YES", "NO"]
+"https://manifold.markets/d/will-manchester-city-win-the-2223-p" = ["NO", "YES"]
+"https://manifold.markets/JonathanNankivell/will-manchester-city-win-the-premie" = ["NO", "YES"]
+"https://manifold.markets/BigChungus/will-manchester-city-win-the-premie-c99281ee9be4" = ["NO", "YES"]
