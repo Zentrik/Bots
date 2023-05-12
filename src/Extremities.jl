@@ -133,13 +133,14 @@ function production(; live=true, confirmBets=false)
     marketById, botData, arguments, smartUsers, dumbUsers = setup(live, confirmBets)
 
     WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true, headers= ["User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"]) do socket
+    # WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true) do socket
         try
             @info "Opened Socket"
             @debug socket
 
             # We could fetch contracts instead which saves us making a HTTP request but we really want the bettors id
-            # send(socket, pushJSON)
-            send(socket, pushJSONBets())
+            send(socket, pushJSON)
+            # send(socket, pushJSONBets())
             @info "Sent Intialisation"
     
             Base.Experimental.@sync begin
@@ -283,6 +284,11 @@ function production(; live=true, confirmBets=false)
                         continue
                     end
 
+                    if market.creatorUsername == bet.userUsername 
+                        @debug "$(bet.userUsername) is probably the market creator"
+                        continue
+                    end
+
                     if market.closeTime - time() * 1000 < 24*60*60*1000 + 6.234*60*1000 # closes in a day
                         @debug "$marketId closes in $(market.closeTime/1000 - time())s"
                         continue
@@ -387,25 +393,33 @@ end
 function retryProd(runs=1; live=true, confirmBets=false)
     delay = 60
     lastRunTime = time()
+    exit = false
 
     for run in 1:runs
+        if exit
+            break
+        end
         try
+            println(Dates.format(now(), "HH:MM:SS.sss"))
+
             production(; live=live, confirmBets=confirmBets)
         catch 
-            tmp = false
-            tmp = for (exception, _) in current_exceptions()
-                if shouldBreak(exception)
-                    return true
-                end
-            end
-
-            if tmp == true
-                break
-            end
 
             println(Dates.format(now(), "HH:MM:SS.sss"))
 
+
+            for (exception, _) in current_exceptions()
+                if shouldBreak(exception)
+                    exit = true
+                    break
+                end
+            end
+
             if run == runs
+                exit = true
+            end
+
+            if exit
                 break
             end
             
@@ -418,4 +432,5 @@ function retryProd(runs=1; live=true, confirmBets=false)
             lastRunTime = time()
         end
     end
+    println(Dates.format(now(), "HH:MM:SS.sss"))
 end
