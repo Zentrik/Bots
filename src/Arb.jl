@@ -270,8 +270,8 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
 
     x0 = zeros(F, length(bettableSlugsIndex))
 
-    ub = F[marketDataBySlug[slug].probability > .98 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
-    lb = F[marketDataBySlug[slug].probability < .03 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    ub = F[marketDataBySlug[slug].probability > .97 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = F[marketDataBySlug[slug].probability < .035 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, pStruct(y_matrix, n_matrix, not_na_matrix, pVec, poolSOA, sharesByEvent, sharesYES, sharesNO), lb=lb, ub=ub)#, sense=Optimization.MaxSense)#, abstol=1e-3, MaxStepsWithoutProgress=10^3)
 
@@ -281,7 +281,7 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     end
 
     @debug "Running adaptive for $(group.name)"
-    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.09)
+    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.15)
     # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
 
     @debug "Yielding after adaptive, $(group.name)"
@@ -454,9 +454,9 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
 
     plannedBets = PlannedBet[]
 
-    maxBetAmount = botData.balance / (2 + 1.5*group.noMarkets)
+    maxBetAmount = max(50, botData.balance-100) / (2 + 1.5*group.noMarkets)
     redeemManaHack = maximum(slug -> max(marketDataBySlug[slug].shares.YES / (1 - marketDataBySlug[slug].probability), marketDataBySlug[slug].shares.NO / marketDataBySlug[slug].probability), group.slugs[bettableSlugsIndex])
-    maxBetAmount += min(redeemManaHack, maxBetAmount, 100.)
+    maxBetAmount += min(redeemManaHack, maxBetAmount, 50.)
     # Remove hack for now as it seems to prevent optmiser betting as much as it can which prevents reruns
 
     betAmounts = optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
@@ -707,13 +707,17 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
             if err isa CompositeException
                 for e in err
                     @debug e
-                    if startswith(e.task.exception, "Wait timed out waiting for new bet")
+                    if e isa TaskFailedException && startswith(e.task.exception, "Wait timed out waiting for new bet")
+                        rethrow()
+                    elseif startswith(e.msg, "Wait timed out waiting for new bet")
                         rethrow()
                     end
                 end
             else
                 @debug err
-                if startswith(err.task.exception, "Wait timed out waiting for new bet")
+                if e isa TaskFailedException && startswith(e.task.exception, "Wait timed out waiting for new bet")
+                    rethrow()
+                elseif startswith(e.msg, "Wait timed out waiting for new bet")
                     rethrow()
                 end
             end
@@ -1038,6 +1042,18 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     end
                 end
 
+                # Fetch new balance every hour, hack to work around repaying loans when redeeming
+                @async_showerr while !WebSockets.isclosed(socket)
+                    sleep(Hour(1))
+
+                    if !WebSockets.isclosed(socket)
+                        @info "3: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
+                end
+
                 # Fetch new balance at 8am
                 @async_showerr while !WebSockets.isclosed(socket)
                     # printstyled("Sleeping Balance at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :blue)
@@ -1085,27 +1101,31 @@ end
 function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, skip=false)
     delay = 60
     lastRunTime = time()
+    exit = false
 
     for run in 1:runs
+        if exit
+            break
+        end
         try
-            println(Dates.format(now(), "HH:MM:SS.sss"))
+            println("Running at ", Dates.format(now(), "HH:MM:SS.sss"))
 
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch
-            println(Dates.format(now(), "HH:MM:SS.sss"))
+            println("Catched at ", Dates.format(now(), "HH:MM:SS.sss"))
 
-            tmp = false
-            tmp = for (exception, _) in current_exceptions()
+            for (exception, _) in current_exceptions()
                 if shouldBreak(exception)
-                    return true
+                    exit = true
+                    break
                 end
             end
 
-            if tmp == true
-                break
+            if run == runs
+                exit = true
             end
 
-            if run == runs
+            if exit
                 break
             end
             
@@ -1118,4 +1138,5 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
             lastRunTime = time()
         end
     end
+    println("Exited at ", Dates.format(now(), "HH:MM:SS.sss"))
 end
