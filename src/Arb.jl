@@ -1,5 +1,5 @@
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Parameters, StructArrays, SciMLBase, LoopVectorization
-using HTTP, JSON3, Dates, OpenSSL
+using HTTP, JSON3, Dates
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 using TimeZones
