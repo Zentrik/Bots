@@ -10,7 +10,7 @@ import ..Bots: @async_showerr, @smart_assert_showerr, display_error, wait_until,
 Base.exit_on_sigint(false)
 
 const F = Float32
-const FEE = F(0.03)
+const FEE = F(0.25)
 
 struct Group
     name::String
@@ -100,7 +100,7 @@ function execute(bet, currentProb, APIKEY)
 
         ohno = :LimitOrder
 
-        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$currentProb"
+        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$currentProb $bet"
     end
 
     if !isapprox(response.probBefore, currentProb, atol=1e-4)
@@ -115,11 +115,11 @@ function updateShares!(marketData, newBet, botData)
 
     if marketData.shares.YES >= marketData.shares.NO
         marketData.shares.YES -= marketData.shares.NO
-        botData.balance += marketData.shares.NO
+        botData.balance += marketData.shares.NO / 2 #hack to deal with repaying loans
         marketData.shares.NO = zero(F)
     elseif marketData.shares.YES < marketData.shares.NO
         marketData.shares.NO -= marketData.shares.YES
-        botData.balance += marketData.shares.YES
+        botData.balance += marketData.shares.YES #hack to deal with repaying loans
         marketData.shares.YES = zero(F)
     end
 end
@@ -219,7 +219,7 @@ function fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sha
         minProfits = min(minProfits, profit)
     end
 
-    return -(minProfits - betCount^2/2 * F(FEE))
+    return -(minProfits - betCount * F(FEE))
 end
 
 mutable struct pStruct
@@ -270,8 +270,8 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
 
     x0 = zeros(F, length(bettableSlugsIndex))
 
-    ub = F[marketDataBySlug[slug].probability > .97 ? 0. : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
-    lb = F[marketDataBySlug[slug].probability < .035 ? 0. : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    ub = F[marketDataBySlug[slug].probability > .97 ? (marketDataBySlug[slug].shares.NO * (1-marketDataBySlug[slug].probability)) : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = F[marketDataBySlug[slug].probability < .035 ? -(marketDataBySlug[slug].shares.YES * marketDataBySlug[slug].probability) : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, pStruct(y_matrix, n_matrix, not_na_matrix, pVec, poolSOA, sharesByEvent, sharesYES, sharesNO), lb=lb, ub=ub)#, sense=Optimization.MaxSense)#, abstol=1e-3, MaxStepsWithoutProgress=10^3)
 
@@ -281,7 +281,7 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     end
 
     @debug "Running adaptive for $(group.name)"
-    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.15)
+    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.25)
     # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
 
     @debug "Yielding after adaptive, $(group.name)"
@@ -493,6 +493,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
     @debug noShares
     @debug group.y_matrix * yesShares
     @debug group.n_matrix * noShares
+    @debug group.y_matrix * yesShares + group.n_matrix * noShares
     @debug group.not_na_matrix[:, bettableSlugsIndex] * betAmounts
     @debug sum(abs.(betAmounts))
     @debug [marketDataBySlug[slug].p for slug in group.slugs]
@@ -566,8 +567,8 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         Buy $(string(bet.shares)) $(string(bet.outcome)) shares for $(string(bet.amount)), redeeming $(string(bet.redeemedMana))")
     end
 
-    if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets) + botData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets))
-        println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
+    if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2 + botData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2) # /2 is hack to deal with repaying loans
+        println(buffer, "Expected Profits:         $profit)")
         @info String(take!(buffer))
 
         @error "Insufficient Balance $(botData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
@@ -576,7 +577,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
     end
 
     if Arguments.confirmBets
-        println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
+        println(buffer, "Expected Profits:         $profit")
         @info String(take!(buffer))
 
         println("Proceed? (y/n)") 
@@ -596,6 +597,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
 
         movedMarkets = 0
         skip = false
+        waitTimedOut = false
 
         if any(oldProb .!= [marketDataBySlug[slug].probability for slug in group.slugs])
             @info "Market moved after optimisation"
@@ -678,6 +680,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting begun for $slug"
                     # Don't place @debug on wait_until otherwise error is not thrown.
                     timers[i] = Timer(60) do _
+                        waitTimedOut = true
                         notify(marketDataBySlug[slug].hasUpdated, "Wait timed out waiting for new bet, UTC: $(unix2zdt(executedBet.createdTime/10^3)), $(marketDataBySlug[slug].lastContractUpdateTimeUTC) on $slug", error=true)
                     end
                     try
@@ -695,8 +698,8 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                 sleep(0.2) # so manifold processes requests in desired order. doesn't seem to help much with a 100ms sleep
             end
         catch err
-            println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
-            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+            println(buffer, "Expected Profits:         $profit") # no more fee, but we still want to use fee in optimisation
+            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
             @info String(take!(buffer))
 
             for i in eachindex(timers)
@@ -704,30 +707,18 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                     close(timers[i])
                 end
             end
-            if err isa CompositeException
-                for e in err
-                    @debug e
-                    if e isa TaskFailedException && startswith(e.task.exception, "Wait timed out waiting for new bet")
-                        rethrow()
-                    elseif startswith(e.msg, "Wait timed out waiting for new bet")
-                        rethrow()
-                    end
-                end
-            else
-                @debug err
-                if e isa TaskFailedException && startswith(e.task.exception, "Wait timed out waiting for new bet")
-                    rethrow()
-                elseif startswith(e.msg, "Wait timed out waiting for new bet")
-                    rethrow()
-                end
+
+            if waitTimedOut
+                rethrow()
             end
+
             rerun = :PostFailure
 
-            return :PostFailure
+            return rerun
         end
 
-        println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
-        println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
+        println(buffer, "Expected Profits:         $profit") # no more fee, but we still want to use fee in optimisation
+        println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
 
         # Doesn't account for redemptions
         # println(buffer, "Actual Profits:         $(minimum(group.y_matrix * [marketDataBySlug[slug].shares.YES for slug in group.slugs] + group.n_matrix * [marketDataBySlug[slug].shares.NO for slug in group.slugs] - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
@@ -739,7 +730,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         end
         return rerun
     else
-        println(buffer, "Expected Profits:         $(profit + FEE * length(plannedBets))") # no more fee, but we still want to use fee in optimisation
+        println(buffer, "Expected Profits:         $profit")
         @info String(take!(buffer))
 
         return :Success

@@ -25,4 +25,4 @@ global_logger(TeeLogger(
     timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))
 ))
 
-ArbBot.retryProd()
+ArbBot.retryProd(15)

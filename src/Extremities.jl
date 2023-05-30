@@ -1,5 +1,5 @@
 using ManifoldMarkets, TOML, Optimization, OptimizationBBO, Dates, Combinatorics, LinearAlgebra, Parameters
-using HTTP, JSON3, Dates, OpenSSL
+using HTTP, JSON3, Dates
 using HTTP.WebSockets
 using SmartAsserts, Logging, LoggingExtras
 
@@ -114,7 +114,7 @@ function setup(live, confirmBets)
 end
 
 const pushJSON = JSON3.write(
-	Dict("topic"=> "realtime:live-bets-", 
+	Dict("topic"=> "realtime:contract_bets-:fk", 
 		"event"=>"phx_join", 
 		"payload"=>Dict(
 			"config"=>Dict("broadcast"=>Dict("ack"=> false, "self"=> false), 
@@ -139,8 +139,8 @@ function production(; live=true, confirmBets=false)
             @debug socket
 
             # We could fetch contracts instead which saves us making a HTTP request but we really want the bettors id
-            send(socket, pushJSON)
-            # send(socket, pushJSONBets())
+            # send(socket, pushJSON)
+            send(socket, pushJSONBets())
             @info "Sent Intialisation"
     
             Base.Experimental.@sync begin
@@ -189,6 +189,11 @@ function production(; live=true, confirmBets=false)
                         @debug "Not a binary market"
                         continue
                     end
+
+                    if bet.visibility == "private"
+                        @debug "Private market"
+                        continue
+                    end
                     
                     if bet.createdTime/1000 < time() - 10
                         @debug "Bet happened over 10s ago, $(bet.createdTime) in unix time"
@@ -209,7 +214,7 @@ function production(; live=true, confirmBets=false)
                     #     response, ohno = execute!(botData, bet)
 
                     #     # Too annoying to get token every time it expires
-                    #     # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=>oppositeOutcome, "shares" => marketById[marketId].shares[oppositeOutcome]), socket_type_tls=OpenSSL.SSLStream)
+                    #     # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=>oppositeOutcome, "shares" => marketById[marketId].shares[oppositeOutcome]))
 
                     #     updateShares!(marketById[marketId], response, botData)
                     # end
@@ -266,7 +271,7 @@ function production(; live=true, confirmBets=false)
                     end
 
                     timenow = time_ns()
-                    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json", "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"], socket_type_tls=OpenSSL.SSLStream)
+                    response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?id=eq.$marketId", headers = ["apikey" => botData.Supabase_APIKEY, "Content-Type" => "application/json", "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"])
                     @info "Getting Market took $((time_ns() - timenow)/10^6) ms"
                     responseJSON = JSON3.read(response.body)[1]
 
@@ -326,7 +331,8 @@ function production(; live=true, confirmBets=false)
                         if ohno 
                             bet = PlannedBet(amount, marketById[marketId].shares[outcome], oppositeOutcome, marketId)
                             response, ohno = execute!(botData, bet)
-                            # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares), socket_type_tls=OpenSSL.SSLStream)
+                            sellBet(botData.Supabase_APIKEY, marketId, oppositeOutcome)
+                            # response = HTTP.post("https://api-nggbo3neva-uc.a.run.app/sellshares", headers=["Authorization" => "Bearer " * botData.FIREBASE_APIKEY, "Content-Type" => "application/json"], body=Dict("contractId"=>marketId, "outcome"=> response.outcome, "shares" => respone.shares))
 
                             # Could cause data race
                             updateShares!(marketById[marketId], response, botData)
@@ -377,7 +383,7 @@ function production(; live=true, confirmBets=false)
         finally
             println("Finally")
             if !WebSockets.isclosed(socket)
-                send(socket, leaveJSON("live-bets"))
+                send(socket, leaveJSON("live-bets-"))
                 println("Left Channel")
     
                 close(socket)
