@@ -565,3 +565,7 @@ USERNAME = "Bot"
 # "https://manifold.markets/itsTomekK/will-recep-tayyip-erdogan-be-the-pr-ec5be1e9e47e"
 "https://manifold.markets/BTE/will-recep-tayyip-erdogan-be-reelec" = ["YES", "NO"]
 "https://manifold.markets/Nostradamnedus/will-erdogan-win-the-2023-turkish-p-8691b1f6a772" = ["YES", "NO"]
+
+# [GROUPS."Delete Comments"]
+# "https://manifold.markets/jonsimon/will-manifold-allow-you-to-delete-y" = ["YES", "NO", "NO"]
+# "https://manifold.markets/VictorLi/will-manifold-users-be-able-to-dele" = ["YES", "YES", "NO"]

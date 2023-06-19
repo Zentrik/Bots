@@ -1103,7 +1103,7 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
 
             production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
         catch
-            println("Catched at ", Dates.format(now(), "HH:MM:SS.sss"))
+            println("Caught at ", Dates.format(now(), "HH:MM:SS.sss"))
 
             for (exception, _) in current_exceptions()
                 if shouldBreak(exception)
@@ -1120,9 +1120,10 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
                 break
             end
             
-            if time() - lastRunTime > 3600
+            if time() - lastRunTime > 60^2
                 delay = 60
             end
+            delay = min(delay, 60*30)
             sleep(delay)
 
             delay *= 5
