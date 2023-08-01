@@ -16,13 +16,15 @@ timestamp_logger(logger) = TransformerLogger(logger) do log
     merge(log, (; message = "$(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss")) $(log.message)"))
 end
 
-const DIR = "Bots\\src\\logs"
+const DIR = "Bots/src/logs"
 
 global_logger(TeeLogger(
     EarlyFilteredLogger(not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-    EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Info)),
-    timestamp_logger(EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR\\Debug-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))),
-    timestamp_logger(MinLevelLogger(FileLogger("$DIR\\Verbose-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))
+    EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Info)),
+    timestamp_logger(EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/Debug-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))),
+    timestamp_logger(MinLevelLogger(FileLogger("$DIR/Verbose-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))
 ))
 
-ArbBot.retryProd(15)
+# ArbBot.production(["Democratic Nominee"], live=false)
+# ArbBot.production(["Room Temp Superconductor Replicate"])
+ArbBot.retryProd(10^5)

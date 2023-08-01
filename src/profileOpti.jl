@@ -1,8 +1,8 @@
 using Pkg, Revise
 Pkg.activate("Bots")
 using Bots
-# includet("$(@__DIR__)/Bots/src/Arb.jl")
-includet("Bots/src/Arb.jl")
+includet("$(@__DIR__)/Bots/src/Arb.jl")
+# includet("Bots/src/Arb.jl")
 # includet("Arb.jl")
 
 function setup()

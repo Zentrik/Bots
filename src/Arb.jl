@@ -119,7 +119,7 @@ function updateShares!(marketData, newBet, botData)
         marketData.shares.NO = zero(F)
     elseif marketData.shares.YES < marketData.shares.NO
         marketData.shares.NO -= marketData.shares.YES
-        botData.balance += marketData.shares.YES #hack to deal with repaying loans
+        botData.balance += marketData.shares.YES / 2#hack to deal with repaying loans
         marketData.shares.YES = zero(F)
     end
 end
@@ -274,11 +274,6 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     lb = F[marketDataBySlug[slug].probability < .035 ? -(marketDataBySlug[slug].shares.YES * marketDataBySlug[slug].probability) : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, pStruct(y_matrix, n_matrix, not_na_matrix, pVec, poolSOA, sharesByEvent, sharesYES, sharesNO), lb=lb, ub=ub)#, sense=Optimization.MaxSense)#, abstol=1e-3, MaxStepsWithoutProgress=10^3)
-
-    function testProblem(problem, betAmounts)
-        _loss(θ) = @inline problem.f(θ, problem.p)
-        _loss(betAmounts)
-    end
 
     @debug "Running adaptive for $(group.name)"
     @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.25)
@@ -498,6 +493,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
     @debug sum(abs.(betAmounts))
     @debug [marketDataBySlug[slug].p for slug in group.slugs]
     @debug [marketDataBySlug[slug].pool for slug in group.slugs]
+    @debug maxBetAmount
     # @debug [marketDataBySlug[slug].limitOrders for slug in group.slugs]
     # @debug [marketDataBySlug[slug].sortedLimitProbs for slug in group.slugs]
 
@@ -545,18 +541,18 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
 
     buffer = IOBuffer()
     newProbBySlug = Dict(group.slugs[j] => newProb[j] for j in bettableSlugsIndex)
-    for (i, bet) in enumerate(plannedBets)
-        amount = betAmounts[i]
+    for bet in plannedBets
+        amount = bet.amount
         slug = urlToSlug(bet.url)
 
         if abs(amount) >= .98 * maxBetAmount
-            @warn "Bet size is $(string(100 * abs(amount)/maxBetAmount))% of maxBetAmount"
+            @warn "Bet size is $(string(100 * amount/maxBetAmount))% of maxBetAmount"
             # bindingConstraint = true
             rerun = :BetMore
         end
 
         if abs(amount) ≈ 1
-            @warn "Bet size is $(string(abs(amount)))"
+            @warn "Bet size is $(string(amount))"
             # bindingConstraint = true
             rerun = :BetMore
         end
@@ -564,10 +560,10 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         println(buffer, "\e]8;;$(string(marketDataBySlug[slug].url))\e\\$(string(marketDataBySlug[slug].question))\e]8;;\e\\
         Prior probs:     $(string(marketDataBySlug[slug].probability * 100))%
         Posterior probs: $(string(newProbBySlug[slug]*100))%
-        Buy $(string(bet.shares)) $(string(bet.outcome)) shares for $(string(bet.amount)), redeeming $(string(bet.redeemedMana))")
+        Buy $(string(bet.shares)) $(string(bet.outcome)) shares for $(string(amount)), redeeming $(string(bet.redeemedMana))")
     end
 
-    if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2 + botData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2) # /2 is hack to deal with repaying loans
+    if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2 + botData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2) || plannedBets[1].amount >= botData.balance # /2 is hack to deal with repaying loans
         println(buffer, "Expected Profits:         $profit)")
         @info String(take!(buffer))
 
@@ -766,6 +762,13 @@ function readData()
     Supabase_APIKEY::String = data["SUPABASE_APIKEY"]
     USERNAME::String = data["USERNAME"]
 
+    function checkURL(url) 
+        if !occursin(r"https://manifold.markets/[\w\d]+/[\w\d]+", url)
+            error("$url is not a valid url")
+        end
+    end
+    foreach(x -> checkURL.(x), keys.(values(GROUPS)))
+
     slugs = getSlugs(GROUPS)
     if !allunique(slugs)
         println("Duplicate slug detected")
@@ -915,6 +918,10 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             end
                         end
 
+                        if !(:data in keys(msgJSON.payload.data.record)) # message doesn't seem to include probabilities or anything useful, only data about relevancy of market.
+                            return nothing
+                        end
+
                         market = msgJSON.payload.data.record.data
                         marketId = market.id
                         # @debug market.slug
@@ -1040,6 +1047,27 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                     if !WebSockets.isclosed(socket)
                         @info "3: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))"
                         botData.balance = getUserByUsername(botData.USERNAME).balance
+                    else
+                        break
+                    end
+                end
+
+                # Fetch new balance every hour, hack to work around repaying loans when redeeming
+                @async_showerr while !WebSockets.isclosed(socket)
+                    if readline() == "R"
+                        if WebSockets.isclosed(socket) break end
+                        @info "4: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))"
+                        botData.balance = getUserByUsername(botData.USERNAME).balance
+                        @info "4: New Balance is $(botData.balance)"
+                    end
+                end
+
+                # Restart every 5 hours, hack to work around some markets not being arbed/ websocket stop sending messages
+                @async_showerr while !WebSockets.isclosed(socket)
+                    sleep(Hour(5))
+
+                    if !WebSockets.isclosed(socket)
+                        error("Restarting")
                     else
                         break
                     end
