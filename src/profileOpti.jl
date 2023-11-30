@@ -1,22 +1,24 @@
 using Pkg, Revise
 Pkg.activate("Bots")
 using Bots
-includet("$(@__DIR__)/Bots/src/Arb.jl")
+# includet("$(@__DIR__)/Bots/src/Arb.jl")
 # includet("Bots/src/Arb.jl")
-# includet("Arb.jl")
+includet("Arb.jl")
 
 function setup()
     groupNames = ["Nuclear Weapons Detonation 2023"]
     arguments = Arguments(live=false, confirmBets=false)
 
-    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()
 
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)
     end
 
+    delete!(GROUPS["Nuclear Weapons Detonation 2023"], "https://manifold.markets/levifinkelstein/will-a-nuclear-weapon-be-detonated-241e2078f53d")
+
     groups = Group.(keys(GROUPS), values(GROUPS))
-    
+
     marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
 
     USERID = ""
@@ -39,7 +41,7 @@ function setup()
             marketDataBySlug[slug].isResolved = false
         end
 
-        marketDataBySlug[slug].closeTime = time()*1000*2
+        marketDataBySlug[slug].closeTime = round(time()*1000*2)
 
         marketDataBySlug[slug].url = "https://manifold.markets/test/$slug"
     end
@@ -58,6 +60,7 @@ function setup()
 end
 
 groupData, botData, marketDataBySlug, arguments = setup()
+@assert arguments.live == false
 
 arbitrageGroup(first(groupData.groups), botData, marketDataBySlug, arguments)
 
@@ -150,7 +153,7 @@ using JET
 
             fees += FEE
 
-            profitsByEvent .-= group.not_na_matrix[:, j] .* abs(betAmount[i]) 
+            profitsByEvent .-= group.not_na_matrix[:, j] .* abs(betAmount[i])
 
             if betAmount[i] >= 1.
                 profitsByEvent .+= group.y_matrix[:, j] .* shares
@@ -560,9 +563,9 @@ function f11!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, poolN
         noShares = n + betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p))
 
         profitsByEvent += ifelse(betAmount[i] >= 1,
-                            y_matrix[:, i] * yesShares, 
-                        ifelse(betAmount[i] <= 1, 
-                            n_matrix[:, i] * noShares, 
+                            y_matrix[:, i] * yesShares,
+                        ifelse(betAmount[i] <= 1,
+                            n_matrix[:, i] * noShares,
                         zero(betAmount[i])))
 
         profitsByEvent -= not_na_matrix[:, i] * abs(betAmount[i])
@@ -712,7 +715,7 @@ function f6SIMD!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, po
 
         sharesNO = vifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
 
-        @inbounds @fastmath for j in eachindex(sharesByEvent) 
+        @inbounds @fastmath for j in eachindex(sharesByEvent)
             profitsByEvent[i] += y_matrix[j*size(y_matrix, 1) + i] * sharesYES
             profitsByEvent[i] += n_matrix[j*size(y_matrix, 1) + i] * sharesNO
         end
@@ -883,7 +886,7 @@ function f9Test2!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolYES, p
 
         sharesYES[i] = ifelse(betAmount[i] >= 1, y + betAmount[i] - y * (n / (n + betAmount[i]))^((1-p)/p), 0)
         sharesNO[i] = ifelse(betAmount[i] <= -1, n - betAmount[i] - n * (y / (y - betAmount[i]))^(p/(1-p)), 0)
-    end    
+    end
 
     minProfits = F(Inf)
 

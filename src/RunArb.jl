@@ -4,7 +4,7 @@ using Revise, Bots # need to dev Bots, so don't activate Bots env. Also revise n
 
 using Logging, LoggingExtras, Dates
 
-function not_Bots_message_filter(log)  
+function not_Bots_message_filter(log)
     if (@isdefined Bots)
         return log._module === Bots || parentmodule(log._module) == Bots || log._module === Main
     else
@@ -18,13 +18,20 @@ end
 
 const DIR = "Bots/src/logs"
 
-global_logger(TeeLogger(
-    EarlyFilteredLogger(not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)), 
-    EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Info)),
-    timestamp_logger(EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/Debug-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))),
-    timestamp_logger(MinLevelLogger(FileLogger("$DIR/Verbose-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))
-))
+# global_logger(TeeLogger(
+#     EarlyFilteredLogger(not_Bots_message_filter, ConsoleLogger(stderr, Logging.Info)),
+#     EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Info)),
+#     timestamp_logger(EarlyFilteredLogger(not_Bots_message_filter, MinLevelLogger(FileLogger("$DIR/Debug-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))),
+#     timestamp_logger(MinLevelLogger(FileLogger("$DIR/Verbose-$(Dates.format(now(), "YYYY-mm-dd-HH-MM")).log"), Logging.Debug))
+# ))
 
-# ArbBot.production(["Democratic Nominee"], live=false)
-# ArbBot.production(["Room Temp Superconductor Replicate"])
+disable_logging(Logging.Debug)
+
+# ArbBot.production(["US Government Shutdown 2023/4"], live=false)
+# ArbBot.retryProd(10^5, ["Room Temp Superconductor Replicate", "Room Temp Superconductor Legit", "Room Temp Superconductor Retraction"])
 ArbBot.retryProd(10^5)
+
+# using Profile, ProfileCanvas
+# Profile.clear()
+# @profile ArbBot.retryProd(1, skip=true)
+# ProfileCanvas.view(; C=true)

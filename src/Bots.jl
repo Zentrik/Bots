@@ -109,7 +109,7 @@ Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType{T}) where {T<:
 Base.convert(::Type{MutableOutcomeType{T}}, x::MutableOutcomeType) where {T<:Number} = MutableOutcomeType{T}(x.YES, x.NO)
 
 function shouldBreak(exception)
-    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch
+    if exception isa MethodError || exception isa InterruptException || exception isa DimensionMismatch || exception isa KeyError
         return true
     elseif exception isa TaskFailedException
         return shouldBreak(exception.task.exception)

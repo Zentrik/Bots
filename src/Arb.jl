@@ -28,12 +28,12 @@ struct Group
         n_matrix = actionVectors .== "NO"
         not_na_matrix = actionVectors .!= "NA"
         noMarkets = length(slugs)
-    
+
         return new(name, slugs, y_matrix, n_matrix, not_na_matrix, noMarkets)
     end
 end
 
-@with_kw mutable struct MarketData 
+@with_kw mutable struct MarketData
     shares::MutableOutcomeType{F} = MutableOutcomeType(0, 0)
 
     limitOrders::MutableOutcomeType{Dict{F, Vector{F}}} = MutableOutcomeType{Dict{F, Vector{F}}}(Dict(), Dict())
@@ -42,7 +42,7 @@ end
     probability::F = -1
     p::F = -1
     pool::MutableOutcomeType{F} = MutableOutcomeType(0, 0)
- 
+
     id::String = ""
     url::String = ""
     question::String = ""
@@ -100,7 +100,7 @@ function execute(bet, currentProb, APIKEY)
 
         ohno = :LimitOrder
 
-        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$currentProb $bet"
+        @smart_assert_showerr !(length(response.fills) == 1 && isnothing(response.fills[end].matchedBetId) && isapprox(response.probBefore, currentProb, atol=1e-4)) "$(response.probBefore) $currentProb $bet"
     end
 
     if !isapprox(response.probBefore, currentProb, atol=1e-4)
@@ -115,17 +115,17 @@ function updateShares!(marketData, newBet, botData)
 
     if marketData.shares.YES >= marketData.shares.NO
         marketData.shares.YES -= marketData.shares.NO
-        botData.balance += marketData.shares.NO / 2 #hack to deal with repaying loans
+        botData.balance += marketData.shares.NO #/ 2 #hack to deal with repaying loans
         marketData.shares.NO = zero(F)
     elseif marketData.shares.YES < marketData.shares.NO
         marketData.shares.NO -= marketData.shares.YES
-        botData.balance += marketData.shares.YES / 2#hack to deal with repaying loans
+        botData.balance += marketData.shares.YES #/ 2#hack to deal with repaying loans
         marketData.shares.YES = zero(F)
     end
 end
 
 function f(betAmount, group, marketDataBySlug, currentNoShares, currentYesShares, bettableSlugsIndex)
-    profitsByEvent = zeros(size(group.y_matrix)[1])
+    profitsByEvent = zeros(eltype(group.y_matrix), size(group.y_matrix)[1])
 
     # newProb = zeros(group.noMarkets) # Makes it obvious which markets we don't bet on. We can print this manually, but this hides errors in fetching market probabilities
     newProb = [marketDataBySlug[slug].probability for slug in group.slugs] # So we return the correct results for markets we don't bet on  and closing soon markets
@@ -165,12 +165,12 @@ end
         @inbounds market = marketDataBySlug[slug]
 
         if abs(betAmount[i]) >= 1.
-            shares = 0.
+            shares = zero(eltype(profitsByEvent))
             @inline shares = betToShares(market.p, market.pool, market.probability, market.limitOrders, market.sortedLimitProbs, betAmount[i]).shares
 
             fees += FEE
 
-            profitsByEvent .-= group.not_na_matrix[:, j] .* abs(betAmount[i]) 
+            profitsByEvent .-= group.not_na_matrix[:, j] .* abs(betAmount[i])
 
             if betAmount[i] >= 1.
                 profitsByEvent .+= group.y_matrix[:, j] .* shares
@@ -178,7 +178,7 @@ end
                 profitsByEvent .+= group.n_matrix[:, j] .* shares
             end
         else
-            betAmount[i] = 0.
+            betAmount[i] = zero(eltype(betAmount))
         end
     end
 
@@ -187,6 +187,7 @@ end
     return profitsByEvent
 end
 
+fNoLimit!(betAmount, p) = fNoLimit!(betAmount, p.y_matrix, p.n_matrix, p.not_na_matrix, p.pVec, p.poolSOA, p.sharesByEvent, p.sharesYES, p.sharesNO)
 function fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, pool, sharesByEvent, sharesNO, sharesYES)
     sharesYES .= 0
     sharesNO .= 0
@@ -253,14 +254,13 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
     if all(slug -> isempty(marketDataBySlug[slug].sortedLimitProbs.YES) && isempty(marketDataBySlug[slug].sortedLimitProbs.NO), group.slugs[bettableSlugsIndex])
         # profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent))
 
-        
+        profitF = OptimizationFunction(fNoLimit!)
 
         # profitF = OptimizationFunction((betAmount, _) -> fNoLimit!(betAmount, y_matrix, n_matrix, not_na_matrix, pVec, poolSOA, sharesByEvent, sharesYES, sharesNO))
         # @inline fTest(betAmount, p) = @inline fNoLimit!(betAmount, p.y_matrix, p.n_matrix, p.not_na_matrix, p.pVec, p.poolSOA, p.sharesByEvent, p.sharesYES, p.sharesNO)
-        fTest(betAmount, p) = fNoLimit!(betAmount, p.y_matrix, p.n_matrix, p.not_na_matrix, p.pVec, p.poolSOA, p.sharesByEvent, p.sharesYES, p.sharesNO)
-        profitF = OptimizationFunction(fTest)
+
         # @benchmark $profitF($betAmounts, $p)
-        
+
         # profitF = OptimizationFunction((betAmount, p) -> fNoLimit!(betAmount, (; group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)...))
         # profitF = OptimizationFunction(FunctionWrapper{Float64, Tuple{Vector{F}, Tuple{Group, Vector{F}, StructVector{MutableOutcomeType{F}, NamedTuple{(:YES, :NO), Tuple{Vector{F}, Vector{F}}}, Int64}, Vector{Int64}, Vector{F}, Vector{F}}}}((betAmount, p) -> fNoLimit!(betAmount, (; group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)...)))
         # profitF = OptimizationFunction(FunctionWrapper{F, Tuple{Vector{F}}}((betAmount,) -> fNoLimit!(betAmount, group, pVec, poolSOA, bettableSlugsIndex, sharesByEvent, profitsByEvent)))
@@ -270,13 +270,14 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
 
     x0 = zeros(F, length(bettableSlugsIndex))
 
-    ub = F[marketDataBySlug[slug].probability > .97 ? (marketDataBySlug[slug].shares.NO * (1-marketDataBySlug[slug].probability)) : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
-    lb = F[marketDataBySlug[slug].probability < .035 ? -(marketDataBySlug[slug].shares.YES * marketDataBySlug[slug].probability) : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    ub = F[marketDataBySlug[slug].probability > .95 ? max(0, (marketDataBySlug[slug].shares.NO * (1-marketDataBySlug[slug].probability))) : maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
+    lb = F[marketDataBySlug[slug].probability < .05 ? min(0, -(marketDataBySlug[slug].shares.YES * marketDataBySlug[slug].probability)) : -maxBetAmount for slug in group.slugs[bettableSlugsIndex]]
 
     problem = Optimization.OptimizationProblem(profitF, x0, pStruct(y_matrix, n_matrix, not_na_matrix, pVec, poolSOA, sharesByEvent, sharesYES, sharesNO), lb=lb, ub=ub)#, sense=Optimization.MaxSense)#, abstol=1e-3, MaxStepsWithoutProgress=10^3)
 
     @debug "Running adaptive for $(group.name)"
-    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.25)
+    # @descend solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.15)
+    @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxtime=.02)
     # @time sol = solve(problem, BBO_de_rand_1_bin_radiuslimited(), maxiters=10^5)
 
     @debug "Yielding after adaptive, $(group.name)"
@@ -285,7 +286,6 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
 
     bestSolution = zeros(F, length(bettableSlugsIndex))
     maxRiskFreeProfit = f(bestSolution, group, marketDataBySlug, noShares, yesShares, bettableSlugsIndex).profitsByEvent |> minimum
-
 
     nonZeroIndices = findall(!iszero, sol.u::Vector{F})
 
@@ -303,12 +303,12 @@ function optimise(group, marketDataBySlug, maxBetAmount, bettableSlugsIndex)
             bestSolution .= betAmount
         end
     end
-    
+
     # if bestSolution == repeat([0.], length(bettableSlugsIndex))
     #     @debug "Running resampling for $(group.name)"
 
     #     @time "Resampling" sol2 = solve(problem, BBO_resampling_memetic_search(), maxtime=.3)
-        
+
     #     @debug "Yielding after resampling, $(group.name)"
     #     # sleep(1)
     #     yield()
@@ -385,10 +385,10 @@ function getMarkets!(marketDataBySlug, slugs, Supabase_APIKEY)
     @sync for paritionedSlugs in Iterators.partition(slugs, 20) # 2000 is max characters in uri, so we have about 1900 for slugs, max slug is about 50 : 1900/50 is 38. generous magin to 20
         @async_showerr begin
             contracts_slugs = join(paritionedSlugs, ",")
-    
+
             response = HTTP.get("https://pxidrgkatumlvfqaxcll.supabase.co/rest/v1/contracts?slug=in.($contracts_slugs)", headers= ["apikey" => Supabase_APIKEY, "Content-Type" => "application/json"])
             responseJSON = JSON3.read(response.body)
-    
+
             for contract in responseJSON
                 updateMarketData!(marketDataBySlug[contract.slug], contract.data, contract.fs_updated_time)
             end
@@ -400,7 +400,7 @@ function getMarketsUsingId!(marketDataBySlug, slugs) # If we use slugs the reque
     for slug in slugs
         @smart_assert_showerr !isnothing(marketDataBySlug[slug].id)
     end
-    
+
     contracts_ids = join(map(slug -> marketDataBySlug[slug].id, slugs), ",") # might be faster to index by id
     # contracts_slugs = join(slugs, ",")
 
@@ -507,7 +507,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
             outcome = amount > 0. ? "YES" : "NO"
             shares = newYesShares[j] + newNoShares[j]
             @smart_assert_showerr isapprox(newYesShares[j], 0, atol=1e-2) || isapprox(newNoShares[j], 0, atol=1e-2) "$j"
-            redeemedMana = 0.
+            redeemedMana = zero(shares)
             if outcome == "YES"
                 redeemedMana = min(marketDataBySlug[slug].shares.NO, shares)
             elseif outcome == "NO"
@@ -515,7 +515,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
             end
 
             @smart_assert_showerr (sign(amount) == sign(newProb[j] - oldProb[j]) || newProb[j] ≈ marketDataBySlug[slug].sortedLimitProbs[Symbol(outcome)][1]) "$slug, $amount, $(newProb[j]), $(oldProb[j]), $i, $j"
-            
+
             bet = PlannedBet(abs(amount), shares, outcome, redeemedMana, marketDataBySlug[slug].id, marketDataBySlug[slug].url, marketDataBySlug[slug].question)
             push!(plannedBets, bet)
         else
@@ -527,7 +527,20 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         end
     end
 
-    sort!(plannedBets, by = bet -> bet.redeemedMana + (!isnothing(firstSlugToBet) ? (bet.id == marketDataBySlug[firstSlugToBet].id ? 250 : 0) : 0), rev=true)
+    if !isnothing(firstSlugToBet)
+        for (i, bet) in enumerate(plannedBets)
+            if bet.id == marketDataBySlug[firstSlugToBet].id
+                plannedBets[i] = plannedBets[1]
+                plannedBets[1] = bet
+                break
+            end
+        end
+        if length(plannedBets) > 1
+            sort!(@views(plannedBets[2:end]), by = bet -> bet.redeemedMana, rev=true)
+        end
+    else
+        sort!(plannedBets, by = bet -> bet.redeemedMana, rev=true)
+    end
 
     # we never return a profit less than 0 so we're not going to redeem bets that have profit less than 0.
     if (profit ≤ 0) && !((profit + FEE * length(plannedBets) ≥ 0) && (sum(bet -> bet.redeemedMana, plannedBets, init=0.) > 1.))
@@ -564,7 +577,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
     end
 
     if (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2 + botData.balance - 100) && (sum(abs.(betAmounts)) >= sum(bet -> bet.redeemedMana, plannedBets)/2) || plannedBets[1].amount >= botData.balance # /2 is hack to deal with repaying loans
-        println(buffer, "Expected Profits:         $profit)")
+        println(buffer, "Expected Profits:         $profit")
         @info String(take!(buffer))
 
         @error "Insufficient Balance $(botData.balance) for $(sum(abs.(betAmounts))) bet redeeming $(sum(bet -> bet.redeemedMana, plannedBets))."
@@ -576,7 +589,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         println(buffer, "Expected Profits:         $profit")
         @info String(take!(buffer))
 
-        println("Proceed? (y/n)") 
+        println("Proceed? (y/n)")
         if readline() !="y"
             rerun = :Success
             return rerun
@@ -600,11 +613,11 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
             return :UnexpectedBet
         end
 
-        try 
+        try
             # need to add check to see if we're actually receiving messages
-            @sync for (i, bet) in enumerate(plannedBets) 
+            @sync for (i, bet) in enumerate(plannedBets)
                 @async_showerr begin
-                    if skip 
+                    if skip
                         return nothing
                     end
 
@@ -615,12 +628,14 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                         rerun = :UnexpectedBet
                         @info "$slug moved from $(oldProbBySlug[slug]) to $(marketDataBySlug[slug].probability)"
                         skip = true
-                        
+
                         return nothing
                     end
 
                     # We use oldProb instead of MarketData as MarketData may have updated to a new probability while we bet.
+                    start_time = time()
                     executedBet, ohno = execute(bet, oldProbBySlug[slug], botData.APIKEY)
+                    println("\e]8;;$(string(marketDataBySlug[slug].url))\e\\$(string(marketDataBySlug[slug].question))\e]8;;\e\\: $(time() - start_time)s")
 
                     botData.balance -= executedBet.amount
 
@@ -691,11 +706,11 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
                     @debug "$(Dates.format(now(), "HH:MM:SS.sss")) Waiting done for $slug"
                 end
 
-                sleep(0.2) # so manifold processes requests in desired order. doesn't seem to help much with a 100ms sleep
+                sleep(0.4) # so manifold processes requests in desired order. doesn't seem to help much with a 100ms sleep
             end
         catch err
             println(buffer, "Expected Profits:         $profit") # no more fee, but we still want to use fee in optimisation
-            println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
+            println(buffer, "Actual Profits:           $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
             @info String(take!(buffer))
 
             for i in eachindex(timers)
@@ -714,7 +729,7 @@ function arbitrageGroup(group, botData, marketDataBySlug, Arguments, firstSlugTo
         end
 
         println(buffer, "Expected Profits:         $profit") # no more fee, but we still want to use fee in optimisation
-        println(buffer, "Actual Profits:         $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
+        println(buffer, "Actual Profits:           $(@turbo minimum(group.y_matrix * yesShares + group.n_matrix * noShares - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent) - FEE * length(plannedBets))")
 
         # Doesn't account for redemptions
         # println(buffer, "Actual Profits:         $(minimum(group.y_matrix * [marketDataBySlug[slug].shares.YES for slug in group.slugs] + group.n_matrix * [marketDataBySlug[slug].shares.NO for slug in group.slugs] - group.not_na_matrix[:, bettableSlugsIndex] * abs.(betAmounts)) - minimum(oldProfitsByEvent))") # no more fee, but we still want to use fee in optimisation
@@ -762,7 +777,7 @@ function readData()
     Supabase_APIKEY::String = data["SUPABASE_APIKEY"]
     USERNAME::String = data["USERNAME"]
 
-    function checkURL(url) 
+    function checkURL(url)
         if !occursin(r"https://manifold.markets/[\w\d]+/[\w\d]+", url)
             error("$url is not a valid url")
         end
@@ -784,7 +799,7 @@ function readData()
     end
 
     for slug in slugs
-        if '#' in slug
+        if '#' in slug || '?' in slug
             println("Invalid Slug $slug")
             error()
         end
@@ -796,14 +811,14 @@ end
 function setup(groupNames, live, confirmBets)
     arguments = Arguments(live, confirmBets)
 
-    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()  
+    GROUPS::Dict{String, Dict{String, Vector{String}}}, APIKEY, Supabase_APIKEY, USERNAME = readData()
 
     if groupNames !== nothing
         GROUPS = Dict(name => GROUPS[name] for name in groupNames)
     end
 
     groups = Group.(keys(GROUPS), values(GROUPS))
-    
+
     marketDataBySlug = Dict(slug => MarketData() for slug in getSlugs(groups))
 
     printstyled("Fetching at $(Dates.format(now(), "HH:MM:SS.sss"))\n"; color = :green)
@@ -848,6 +863,11 @@ function runGroup(group, groupData, botData, marketDataBySlug, arguments, taskVa
             getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
         end
 
+        # if rerun != :FirstRun && rerun != :numberOfPostFailures
+        #     @info "Fetching markets"
+        #     getMarkets!(marketDataBySlug, group.slugs, botData.Supabase_APIKEY)
+        # end
+
         @warn "Running $(group.name) at $(Dates.format(now(), "HH:MM:SS.sss"))"
         @debug [marketDataBySlug[slug].p for slug in group.slugs]
         @debug [marketDataBySlug[slug].pool for slug in group.slugs]
@@ -875,6 +895,34 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
     errorOccurred = false
 
+    # # Fetch new balance every hour, hack to work around repaying loans when redeeming
+    # @async_showerr while true
+    #     @info "3: Fetching Balance at $(Dates.format(now(), "HH:MM:SS.sss"))"
+    #     botData.balance = getUserByUsername(botData.USERNAME).balance
+
+    #     sleep(Hour(1))
+    # end
+
+    # while true
+    #     @time "Fetching Markets" getMarkets!(marketDataBySlug, getSlugs(groupData.groups), botData.Supabase_APIKEY)
+
+    #     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
+    #     for group in groupData.groups
+    #         if errorOccurred
+    #             break
+    #         end
+    #         runGroup(group, groupData, botData, marketDataBySlug, arguments)
+
+    #         for slug in group.slugs
+    #             marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
+    #             marketDataBySlug[slug].sortedLimitProbs = MutableOutcomeType(F[], F[])
+    #         end
+    #     end
+
+    #     @warn "All: Done all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
+    #     sleep(60+rand()*10-5)
+    # end
+
     WebSockets.open(uri(botData.Supabase_APIKEY), suppress_close_error=true, headers=["User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19582"]) do socket
         try
             @info "Opened Socket"
@@ -883,16 +931,16 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             send(socket, pushJSONContracts())
             # send(socket, pushJSONBets())
             @info "Sent Intialisation"
-    
+
             Base.Experimental.@sync begin # So that we exit on error straight away and close socket
                 # Reads messages whilst in this loop but blocks arbing due to them, also ensures MarketData updates after we make a bet
                 currentTask = @async_showerr if !skip && !errorOccurred
-                    sleep(5) # idk might work to fix bets not coming through on first run
+                    # sleep(5) # idk might work to fix bets not coming through on first run
                     @warn "All: Running all groups at $(Dates.format(now(), "HH:MM:SS.sss"))"
-                    for group in groupData.groups       
+                    for group in groupData.groups
                         if errorOccurred
                             break
-                        end     
+                        end
                         runGroup(group, groupData, botData, marketDataBySlug, arguments)
 
                         for slug in group.slugs
@@ -906,7 +954,8 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                 #Reading messages
                 # should switch to @spawn :interactive
                 @async_showerr for msg in socket
-                    @async_showerr begin 
+                    @async_showerr begin
+                        # GC.enable(false)
                         msgJSON = JSON3.read(msg)
                         if !(:data in keys(msgJSON.payload))
                             if :status in keys(msgJSON.payload) && msgJSON.payload.status == "error"
@@ -926,7 +975,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                         marketId = market.id
                         # @debug market.slug
 
-                        if marketId in groupData.contractIdSet 
+                        if marketId in groupData.contractIdSet
                             @smart_assert_showerr market.mechanism == "cpmm-1"
 
                             slug = groupData.contractIdToSlug[marketId] #market.slug also works
@@ -975,7 +1024,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                             # When a bet occurs, two messages are sent, one with the old lastBetTime and one with the new but both have the correct probability so on second run oldProb doesn't update
                             if marketDataBySlug[slug].probability ≉ marketDataBySlug[slug].lastOptimisedProb && !TaskDict[groupIndex].runAgain
-                                
+
                                 TaskDict[groupIndex] = (runAgain = true, task=TaskDict[groupIndex].task)
 
                                 while !istaskdone(currentTask) # say we have 3 tasks A, B, C. A is running when B, C come in so both wait for A to finish. The B runs sets currentTask to itself but C is onlt waiting for A not the new currentTask B so need a while loop.
@@ -1007,7 +1056,7 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
 
                                 @debug "current prob $(marketDataBySlug[slug].probability)"
                                 runGroup(group, groupData, botData, marketDataBySlug, arguments, TaskDict[groupIndex], slug)
-            
+
                                 @debug "Removing limit orders after running on $(group.name), $(marketDataBySlug[slug].limitOrders), $(marketDataBySlug[slug].sortedLimitProbs)"
                                 for slug in group.slugs
                                     marketDataBySlug[slug].limitOrders = MutableOutcomeType(Dict{F, Vector{F}}(), Dict{F, Vector{F}}()) # need to reset as we aren't tracking limit orders
@@ -1017,10 +1066,11 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
                             end
                         end
 
+                        # GC.enable(true)
                         return nothing
                     end
                 end
-    
+
                 # HeartBeat
                 @async_showerr begin
                     sleep(30)
@@ -1106,14 +1156,14 @@ function production(groupNames = nothing; live=true, confirmBets=false, skip=fal
             if !WebSockets.isclosed(socket)
                 send(socket, leaveJSON())
                 println("Left Channel")
-        
+
                 close(socket)
             end
         end
     end
 end
 
-function test(groupNames = nothing; live=false, confirmBets=true, skip=false) 
+function test(groupNames = nothing; live=false, confirmBets=true, skip=false)
     production(groupNames; live=live, confirmBets=confirmBets, skip=skip)
 end
 
@@ -1134,6 +1184,7 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
             println("Caught at ", Dates.format(now(), "HH:MM:SS.sss"))
 
             for (exception, _) in current_exceptions()
+                @show exception
                 if shouldBreak(exception)
                     exit = true
                     break
@@ -1147,7 +1198,7 @@ function retryProd(runs=1, groupNames = nothing; live=true, confirmBets=false, s
             if exit
                 break
             end
-            
+
             if time() - lastRunTime > 60^2
                 delay = 60
             end
