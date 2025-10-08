@@ -762,8 +762,15 @@ function fetchMyShares!(marketDataBySlug, groupData, USERID, slugs)
 
     # what if it returns nothing for some contract? presumably that means we never invested so MarketData should already be correct
 
+    updated_time_per_contract = Dict{String, ZonedDateTime}()
+
     for contract_metrics in responseJSON
         slug = groupData.contractIdToSlug[contract_metrics.contract_id]
+        time = ZonedDateTime(DateTime(contract_metrics.fs_updated_time, dateformat"yyyy-mm-ddTHH:MM:SS.sss"), tz"UTC")
+        if haskey(updated_time_per_contract, slug) && updated_time_per_contract[slug] >= time
+            continue
+        end
+        updated_time_per_contract[slug] = time
         for (outcome, shares) in contract_metrics.data.totalShares
             marketDataBySlug[slug].shares[outcome] = shares
         end

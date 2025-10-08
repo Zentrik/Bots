@@ -187,14 +187,6 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/jonsimon/will-the-life-expectancy-in-any-cou" = ["YES", "NO", "NO"]
 "https://manifold.markets/jonsimon/will-life-expectancy-in-any-country" = ["YES", "YES", "NO"]
 
-[GROUPS."Trump Twitter"]
-"https://manifold.markets/kolotom99/will-realdonaldtrump-tweet-in-2023" = ["YES", "NO", "NO"]
-"https://manifold.markets/ACXBot/21-will-donald-trump-make-at-least" = ["YES", "NO", "NO"]
-"https://manifold.markets/levifinkelstein/21-will-donald-trump-make-at-least-b7d5fe8a2f72" = ["YES", "NO", "NO"]
-"https://manifold.markets/metabro/donald-trumps-return-on-twitter-wil-27dcf6a68db5" = ["YES", "NO", "NO"]
-# "https://manifold.markets/CP/will-donald-trump-tweet-once-in-202" = ["YES", "NO", "NO"]
-"https://manifold.markets/Gigacasting/will-trump-tweet-by-nov-2024" = ["YES", "YES", "NO"]
-
 [GROUPS."Embryo Selection"]
 "https://manifold.markets/DeanValentine/will-over-10000-people-be-conceived" = ["YES", "YES", "YES", "NO"]
 "https://manifold.markets/DeanValentine/will-over-100000-people-be-conceive" = ["YES", "YES", "NO", "NO"]
@@ -274,9 +266,9 @@ USERNAME = "BottieMcBotface"
 "https://manifold.markets/levifinkelstein/will-an-ai-get-gold-on-any-internat-f8a631c46717" = ["YES", "NO"]
 "https://manifold.markets/Austin/will-an-ai-get-gold-on-any-internat" = ["YES", "NO"]
 
-[GROUPS."AI movie"]
-"https://manifold.markets/levifinkelstein/in-2028-will-an-ai-be-able-to-gener-f3ae490be9cc" = ["YES", "NO"]
-"https://manifold.markets/ScottAlexander/in-2028-will-an-ai-be-able-to-gener" = ["YES", "NO"]
+# [GROUPS."AI movie"]
+# "https://manifold.markets/levifinkelstein/in-2028-will-an-ai-be-able-to-gener-f3ae490be9cc" = ["YES", "NO"]
+# "https://manifold.markets/ScottAlexander/in-2028-will-an-ai-be-able-to-gener" = ["YES", "NO"]
 
 [GROUPS."AI Wipe Out Humanity 2100"]
 "https://manifold.markets/levifinkelstein/will-ai-wipe-out-humanity-before-th-5d0035bb64f2" = ["YES", "NO"]
